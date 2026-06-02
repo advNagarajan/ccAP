@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from app.api.source_routes import router as source_router
 
 app = FastAPI(
     title = "Smart Data Landing and Schema Intelligence Platform",
@@ -10,3 +11,5 @@ def health():
     return {
         "status" : "running"
     }
+
+app.include_router(source_router)

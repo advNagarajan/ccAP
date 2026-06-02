@@ -4,7 +4,9 @@ from sqlalchemy import (
     String,
     Text,
     DateTime,
-    ForeignKey
+    ForeignKey,
+    func,
+    text
 )
 
 from sqlalchemy.dialects.postgresql import (
@@ -27,7 +29,8 @@ class Source(Base):
 
     source_id: Mapped[str] = mapped_column(
         UUID(as_uuid=True),
-        primary_key=True
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
     )
 
     config_id: Mapped[str] = mapped_column(
@@ -61,11 +64,13 @@ class Source(Base):
     )
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime
+        DateTime,
+        server_default=func.now()
     )
 
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime
+        DateTime,
+        server_default=func.now()
     )
 
     configuration = relationship(

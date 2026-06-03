@@ -1,0 +1,6 @@
+config_type: SOURCE
+config_subtype: CSV
+
+path: test.csv
+delimiter: ","
+header: true

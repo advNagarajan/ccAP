@@ -1,0 +1,4 @@
+config_type: INVALID
+config_subtype: CSV
+
+path: test.csv

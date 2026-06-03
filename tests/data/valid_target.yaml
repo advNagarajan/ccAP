@@ -1,0 +1,6 @@
+config_type: TARGET
+config_subtype: BIGQUERY
+
+project_id: demo
+dataset: test
+table: customers

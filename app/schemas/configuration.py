@@ -45,5 +45,3 @@ class ConfigurationUpdate(BaseModel):
     config_content: dict | None = None
 
     status: str | None = None
-
-    version: int | None = None

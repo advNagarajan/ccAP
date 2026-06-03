@@ -1,4 +1,5 @@
 from datetime import datetime
+from uuid import UUID as UUIDType
 
 from sqlalchemy import (
     String,
@@ -26,7 +27,7 @@ class ProcessingConfiguration(Base):
     __tablename__ = "processing_configurations"
     __table_args__ = {"schema": "metadata"}
 
-    config_id: Mapped[str] = mapped_column(
+    config_id: Mapped[UUIDType] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
         server_default=text("gen_random_uuid()")
@@ -58,12 +59,14 @@ class ProcessingConfiguration(Base):
 
     status: Mapped[str] = mapped_column(
         String(30),
-        nullable=False
+        nullable=False,
+        server_default="ACTIVE"
     )
 
     version: Mapped[int] = mapped_column(
         Integer,
-        nullable=False
+        nullable=False,
+        server_default=text("1")
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -73,5 +76,5 @@ class ProcessingConfiguration(Base):
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
-        server_default=func.now()
+        server_default=func.now(),
     )

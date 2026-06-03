@@ -1,3 +1,7 @@
+from uuid import UUID
+
+import yaml
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -9,8 +13,6 @@ from fastapi import (
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-import yaml
-
 from app.db.session import get_db
 
 from app.models.processing_configuration import (
@@ -18,7 +20,9 @@ from app.models.processing_configuration import (
 )
 
 from app.schemas.configuration import (
-    ConfigurationCreateResponse
+    ConfigurationCreateResponse,
+    ConfigurationResponse,
+    ConfigurationUpdate
 )
 
 router = APIRouter(
@@ -37,6 +41,12 @@ VALID_CONFIG_SUBTYPES = {
     "BIGQUERY",
     "FIRESTORE",
     "GCS"
+}
+
+VALID_STATUSES = {
+    "ACTIVE",
+    "INACTIVE",
+    "DELETED"
 }
 
 
@@ -125,16 +135,14 @@ async def create_configuration(
         None
     )
 
-    configuration = (
-        ProcessingConfiguration(
-            name=file.filename,
-            description=None,
-            config_type=config_type,
-            config_subtype=config_subtype,
-            config_content=config_content,
-            status="ACTIVE",
-            version=1
-        )
+    configuration = ProcessingConfiguration(
+        name=file.filename,
+        description=None,
+        config_type=config_type,
+        config_subtype=config_subtype,
+        config_content=config_content,
+        status="ACTIVE",
+        version=1
     )
 
     db.add(configuration)
@@ -156,3 +164,128 @@ async def create_configuration(
         "created_at":
             configuration.created_at
     }
+
+
+@router.get(
+    "/configurations",
+    response_model=list[ConfigurationResponse]
+)
+def get_configurations(
+    db: Session = Depends(get_db)
+):
+
+    configurations = db.execute(
+        select(
+            ProcessingConfiguration
+        ).where(
+            ProcessingConfiguration.status
+            != "DELETED"
+        )
+    ).scalars().all()
+
+    return configurations
+
+
+@router.get(
+    "/configurations/{config_id}",
+    response_model=ConfigurationResponse
+)
+def get_configuration(
+    config_id: UUID,
+    db: Session = Depends(get_db)
+):
+
+    configuration = db.get(
+        ProcessingConfiguration,
+        config_id
+    )
+
+    if not configuration:
+        raise HTTPException(
+            status_code=404,
+            detail="Configuration not found"
+        )
+
+    return configuration
+
+
+@router.patch(
+    "/configurations/{config_id}",
+    response_model=ConfigurationResponse
+)
+def update_configuration(
+    config_id: UUID,
+    payload: ConfigurationUpdate,
+    db: Session = Depends(get_db)
+):
+
+    configuration = db.get(
+        ProcessingConfiguration,
+        config_id
+    )
+
+    if not configuration:
+        raise HTTPException(
+            status_code=404,
+            detail="Configuration not found"
+        )
+
+    updates = payload.model_dump(
+        exclude_unset=True
+    )
+
+    if (
+        "status" in updates
+        and updates["status"]
+        not in VALID_STATUSES
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid status"
+        )
+
+    for field, value in updates.items():
+        setattr(
+            configuration,
+            field,
+            value
+        )
+
+    configuration.version += 1
+
+    db.commit()
+
+    db.refresh(configuration)
+
+    return configuration
+
+
+@router.delete(
+    "/configurations/{config_id}",
+    response_model=ConfigurationResponse
+)
+def delete_configuration(
+    config_id: UUID,
+    db: Session = Depends(get_db)
+):
+
+    configuration = db.get(
+        ProcessingConfiguration,
+        config_id
+    )
+
+    if not configuration:
+        raise HTTPException(
+            status_code=404,
+            detail="Configuration not found"
+        )
+
+    configuration.status = "DELETED"
+
+    configuration.version += 1
+
+    db.commit()
+
+    db.refresh(configuration)
+
+    return configuration

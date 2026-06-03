@@ -13,6 +13,8 @@ from app.db.session import get_db
 from app.models.source import Source
 from app.models.job import Job
 
+from app.constants.job_status import JobStatus
+
 from app.schemas.ingestion import (
     IngestionCreate,
     IngestionResponse
@@ -43,7 +45,7 @@ def create_ingestion(
 
     job = Job(
         source_id=payload.source_id,
-        status="RECEIVED"
+        status=JobStatus.RECEIVED
     )
 
     db.add(job)

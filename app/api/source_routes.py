@@ -182,7 +182,7 @@ def update_source(
 
     db.refresh(source)
 
-    return 
+    return source
 
 @router.delete(
     "/sources/{source_id}",

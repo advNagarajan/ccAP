@@ -20,6 +20,10 @@ from app.schemas.ingestion import (
     IngestionResponse
 )
 
+from app.pubsub.publisher import (
+    publish_ingestion_requested
+)
+
 router = APIRouter(tags=["Ingestions"])
 
 
@@ -53,5 +57,10 @@ def create_ingestion(
     db.commit()
 
     db.refresh(job)
+
+    publish_ingestion_requested(
+        job.job_id,
+        job.source_id
+    )
 
     return job

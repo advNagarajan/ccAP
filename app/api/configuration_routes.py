@@ -10,6 +10,8 @@ from fastapi import (
     HTTPException
 )
 
+from datetime import datetime, UTC
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -208,7 +210,6 @@ def get_configuration(
 
     return configuration
 
-
 @router.patch(
     "/configurations/{config_id}",
     response_model=ConfigurationResponse
@@ -253,12 +254,17 @@ def update_configuration(
 
     configuration.version += 1
 
+    configuration.updated_at = datetime.now(
+        UTC
+    ).replace(
+        tzinfo=None
+    )
+
     db.commit()
 
     db.refresh(configuration)
 
     return configuration
-
 
 @router.delete(
     "/configurations/{config_id}",
@@ -283,6 +289,12 @@ def delete_configuration(
     configuration.status = "DELETED"
 
     configuration.version += 1
+
+    configuration.updated_at = datetime.now(
+        UTC
+    ).replace(
+        tzinfo=None
+    )
 
     db.commit()
 

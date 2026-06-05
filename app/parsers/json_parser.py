@@ -16,6 +16,6 @@ class JsonParser(BaseParser):
 
         return Dataset(
             records=records,
-            source_type="GCS",
+            source_type=raw_data.source_type,
             format_type="JSON"
         )

@@ -3,6 +3,7 @@ from datetime import datetime, UTC
 from uuid import UUID
 
 from app.db.database import SessionLocal
+
 from app.models.job import Job
 from app.models.source import Source
 
@@ -10,6 +11,11 @@ from app.constants.job_status import JobStatus
 
 from app.connectors.registry import CONNECTORS
 from app.parsers.registry import PARSERS
+
+from app.services.artifact_service import (
+    mark_processed,
+    mark_failed
+)
 
 from app.pubsub.publisher import (
     publish_job_completed,
@@ -48,33 +54,102 @@ def process_ingestion_requested(message_data: bytes):
 
         if connector is None:
             raise Exception(
-                f"No connector registered for "
-                f"{source.source_type}"
+                f"No connector registered for {source.source_type}"
             )
 
-        job.current_stage = "Extracting Data"
+        job.current_stage = "Discovering Artifacts"
 
         db.commit()
 
-        raw_data = connector.extract(source)
+        artifacts = connector.list_artifacts(source)
 
-        parser = PARSERS.get(raw_data.format_type)
+        unprocessed_artifacts = connector.get_unprocessed_artifacts(
+            source,
+            artifacts,
+            db
+        )
 
-        if parser is None:
-            raise Exception(
-                f"No parser registered for "
-                f"{raw_data.format_type}"
+        if not unprocessed_artifacts:
+
+            print(
+                f"No unprocessed artifacts found for "
+                f"source {source.source_id}"
             )
 
-        job.current_stage = "Parsing Dataset"
+            job.status = JobStatus.COMPLETED
+            job.current_stage = "No New Artifacts"
+            job.completed_at = datetime.now(UTC)
 
-        db.commit()
+            db.commit()
 
-        dataset = parser.parse(raw_data)
+            publish_job_completed(
+                job.job_id,
+                job.source_id
+            )
+
+            return
+
+        total_records = 0
+
+        for artifact in unprocessed_artifacts:
+
+            try:
+                job.current_stage = (
+                    f"Processing {artifact.artifact_name}"
+                )
+
+                db.commit()
+
+                raw_data = connector.extract(
+                    source,
+                    artifact
+                )
+
+                parser = PARSERS.get(
+                    raw_data.format_type
+                )
+
+                if parser is None:
+                    raise Exception(
+                        f"No parser registered for "
+                        f"{raw_data.format_type}"
+                    )
+
+                dataset = parser.parse(raw_data)
+
+                record_count = len(dataset.records)
+
+                total_records += record_count
+
+                mark_processed(
+                    source.source_id,
+                    artifact,
+                    db
+                )
+
+                print(
+                    f"Processed {artifact.artifact_name} "
+                    f"({record_count} records)"
+                )
+
+            except Exception as artifact_error:
+
+                mark_failed(
+                    source.source_id,
+                    artifact,
+                    str(artifact_error),
+                    db
+                )
+
+                print(
+                    f"Failed artifact "
+                    f"{artifact.artifact_name}: "
+                    f"{artifact_error}"
+                )
 
         print(
-            f"Dataset contains "
-            f"{len(dataset.records)} records"
+            f"Processed {len(unprocessed_artifacts)} artifacts "
+            f"containing {total_records} records"
         )
 
         job.status = JobStatus.COMPLETED
@@ -91,12 +166,14 @@ def process_ingestion_requested(message_data: bytes):
         print(f"Completed job {job_id}")
 
     except Exception as e:
+
         print(f"Failed job {job_id}: {e}")
 
         try:
             job = db.get(Job, job_id)
 
             if job is not None:
+
                 job.status = JobStatus.FAILED
                 job.current_stage = "Failed"
                 job.error_message = str(e)

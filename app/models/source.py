@@ -35,9 +35,7 @@ class Source(Base):
 
     config_id: Mapped[str] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey(
-            "metadata.processing_configurations.config_id"
-        ),
+        ForeignKey("metadata.processing_configurations.config_id"),
         nullable=False
     )
 
@@ -51,13 +49,9 @@ class Source(Base):
         nullable=False
     )
 
-    connection_details: Mapped[dict] = mapped_column(
-        JSONB
-    )
+    connection_details: Mapped[dict] = mapped_column(JSONB)
 
-    description: Mapped[str | None] = mapped_column(
-        Text
-    )
+    description: Mapped[str | None] = mapped_column(Text)
 
     status: Mapped[str] = mapped_column(
         String(30)
@@ -73,6 +67,4 @@ class Source(Base):
         server_default=func.now()
     )
 
-    configuration = relationship(
-        "ProcessingConfiguration"
-    )
+    configuration = relationship("ProcessingConfiguration")

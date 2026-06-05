@@ -17,9 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 
-from app.models.processing_configuration import (
-    ProcessingConfiguration
-)
+from app.models.processing_configuration import ProcessingConfiguration
 
 from app.schemas.configuration import (
     ConfigurationCreateResponse,
@@ -90,13 +88,9 @@ async def create_configuration(
             detail="YAML must contain a valid object"
         )
 
-    config_type = config.get(
-        "config_type"
-    )
+    config_type = config.get("config_type")
 
-    config_subtype = config.get(
-        "config_subtype"
-    )
+    config_subtype = config.get("config_subtype")
 
     if config_type not in VALID_CONFIG_TYPES:
         raise HTTPException(
@@ -111,9 +105,7 @@ async def create_configuration(
         )
 
     existing = db.execute(
-        select(
-            ProcessingConfiguration
-        ).where(
+        select(ProcessingConfiguration).where(
             ProcessingConfiguration.name
             == file.filename
         )
@@ -127,15 +119,9 @@ async def create_configuration(
 
     config_content = dict(config)
 
-    config_content.pop(
-        "config_type",
-        None
-    )
+    config_content.pop("config_type", None)
 
-    config_content.pop(
-        "config_subtype",
-        None
-    )
+    config_content.pop("config_subtype", None)
 
     configuration = ProcessingConfiguration(
         name=file.filename,
@@ -177,9 +163,7 @@ def get_configurations(
 ):
 
     configurations = db.execute(
-        select(
-            ProcessingConfiguration
-        ).where(
+        select(ProcessingConfiguration).where(
             ProcessingConfiguration.status
             != "DELETED"
         )
@@ -231,9 +215,7 @@ def update_configuration(
             detail="Configuration not found"
         )
 
-    updates = payload.model_dump(
-        exclude_unset=True
-    )
+    updates = payload.model_dump(exclude_unset=True)
 
     if (
         "status" in updates
@@ -254,11 +236,7 @@ def update_configuration(
 
     configuration.version += 1
 
-    configuration.updated_at = datetime.now(
-        UTC
-    ).replace(
-        tzinfo=None
-    )
+    configuration.updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     db.commit()
 
@@ -290,11 +268,7 @@ def delete_configuration(
 
     configuration.version += 1
 
-    configuration.updated_at = datetime.now(
-        UTC
-    ).replace(
-        tzinfo=None
-    )
+    configuration.updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     db.commit()
 

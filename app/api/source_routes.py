@@ -13,9 +13,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 
 from app.models.source import Source
-from app.models.processing_configuration import (
-    ProcessingConfiguration
-)
+from app.models.processing_configuration import ProcessingConfiguration
 
 from app.schemas.source import (
     SourceCreate,
@@ -49,10 +47,7 @@ def create_source(
             detail="Invalid source type"
         )
 
-    config = db.get(
-        ProcessingConfiguration,
-        payload.config_id
-    )
+    config = db.get(ProcessingConfiguration, payload.config_id)
 
     if config is None:
         raise HTTPException(

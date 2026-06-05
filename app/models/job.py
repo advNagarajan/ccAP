@@ -48,17 +48,11 @@ class Job(Base):
         String(100)
     )
 
-    started_at: Mapped[datetime | None] = mapped_column(
-        DateTime
-    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
 
-    completed_at: Mapped[datetime | None] = mapped_column(
-        DateTime
-    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
-    error_message: Mapped[str | None] = mapped_column(
-        Text
-    )
+    error_message: Mapped[str | None] = mapped_column(Text)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
@@ -70,6 +64,4 @@ class Job(Base):
         server_default=func.now()
     )
 
-    source = relationship(
-        "Source"
-    )
+    source = relationship("Source")

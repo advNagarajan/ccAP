@@ -20,9 +20,7 @@ from app.schemas.ingestion import (
     IngestionResponse
 )
 
-from app.pubsub.publisher import (
-    publish_ingestion_requested
-)
+from app.pubsub.publisher import publish_ingestion_requested
 
 router = APIRouter(tags=["Ingestions"])
 

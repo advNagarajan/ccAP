@@ -39,18 +39,14 @@ class ProcessingConfiguration(Base):
         nullable=False
     )
 
-    description: Mapped[str | None] = mapped_column(
-        Text
-    )
+    description: Mapped[str | None] = mapped_column(Text)
 
     config_type: Mapped[str] = mapped_column(
         String(50),
         nullable=False
     )
 
-    config_subtype: Mapped[str | None] = mapped_column(
-        String(50)
-    )
+    config_subtype: Mapped[str | None] = mapped_column(String(50))
 
     config_content: Mapped[dict] = mapped_column(
         JSONB,

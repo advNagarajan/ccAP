@@ -1,11 +1,16 @@
 import json
-import time
 from datetime import datetime, UTC
 from uuid import UUID
 
 from app.db.database import SessionLocal
 from app.models.job import Job
+from app.models.source import Source
+
 from app.constants.job_status import JobStatus
+
+from app.connectors.registry import CONNECTORS
+from app.parsers.registry import PARSERS
+
 from app.pubsub.publisher import (
     publish_job_completed,
     publish_job_failed
@@ -29,12 +34,48 @@ def process_ingestion_requested(message_data: bytes):
         print(f"Processing job {job_id}")
 
         job.status = JobStatus.RUNNING
-        job.current_stage = "Worker Processing"
+        job.current_stage = "Loading Source"
         job.started_at = datetime.now(UTC)
 
         db.commit()
 
-        time.sleep(5)
+        source = db.get(Source, job.source_id)
+
+        if source is None:
+            raise Exception("Source not found")
+
+        connector = CONNECTORS.get(source.source_type)
+
+        if connector is None:
+            raise Exception(
+                f"No connector registered for "
+                f"{source.source_type}"
+            )
+
+        job.current_stage = "Extracting Data"
+
+        db.commit()
+
+        raw_data = connector.extract(source)
+
+        parser = PARSERS.get(raw_data.format_type)
+
+        if parser is None:
+            raise Exception(
+                f"No parser registered for "
+                f"{raw_data.format_type}"
+            )
+
+        job.current_stage = "Parsing Dataset"
+
+        db.commit()
+
+        dataset = parser.parse(raw_data)
+
+        print(
+            f"Dataset contains "
+            f"{len(dataset.records)} records"
+        )
 
         job.status = JobStatus.COMPLETED
         job.current_stage = "Completed"

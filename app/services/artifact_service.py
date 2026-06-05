@@ -17,15 +17,23 @@ def get_unprocessed_artifacts(
 
     for artifact in artifacts:
 
-        existing = db.execute(
+        record = db.execute(
             select(ArtifactRecord).where(
                 ArtifactRecord.source_id == source_id,
                 ArtifactRecord.external_artifact_id == artifact.external_id
             )
         ).scalar_one_or_none()
 
-        if existing is None:
-            unprocessed.append(artifact)
+        if record is None:
+            continue
+
+        if record.status in (
+            "DISCOVERED",
+            "FAILED"
+        ):
+            unprocessed.append(
+                artifact
+            )
 
     return unprocessed
 
@@ -78,6 +86,32 @@ def register_artifacts(
         )
 
 
+def discover_new_artifacts(
+    source_id,
+    artifacts: list[Artifact],
+    db: Session
+) -> list[Artifact]:
+
+    new_artifacts = []
+
+    for artifact in artifacts:
+
+        existing = db.execute(
+            select(ArtifactRecord).where(
+                ArtifactRecord.source_id == source_id,
+                ArtifactRecord.external_artifact_id == artifact.external_id
+            )
+        ).scalar_one_or_none()
+
+        if existing is None:
+
+            mark_discovered(source_id, artifact, db)
+
+            new_artifacts.append(artifact)
+
+    return new_artifacts
+
+
 def mark_processed(
     source_id,
     artifact: Artifact,
@@ -121,34 +155,3 @@ def mark_failed(
     record.failure_reason = str(reason)
 
     db.commit()
-
-def discover_new_artifacts(
-    source_id,
-    artifacts: list[Artifact],
-    db: Session
-) -> list[Artifact]:
-
-    new_artifacts = []
-
-    for artifact in artifacts:
-
-        existing = db.execute(
-            select(ArtifactRecord).where(
-                ArtifactRecord.source_id == source_id,
-                ArtifactRecord.external_artifact_id == artifact.external_id
-            )
-        ).scalar_one_or_none()
-
-        if existing is None:
-
-            mark_discovered(
-                source_id,
-                artifact,
-                db
-            )
-
-            new_artifacts.append(
-                artifact
-            )
-
-    return new_artifacts

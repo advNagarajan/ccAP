@@ -6,6 +6,10 @@ from uuid import UUID
 from app.db.database import SessionLocal
 from app.models.job import Job
 from app.constants.job_status import JobStatus
+from app.pubsub.publisher import (
+    publish_job_completed,
+    publish_job_failed
+)
 
 
 def process_ingestion_requested(message_data: bytes):
@@ -38,6 +42,11 @@ def process_ingestion_requested(message_data: bytes):
 
         db.commit()
 
+        publish_job_completed(
+            job.job_id,
+            job.source_id
+        )
+
         print(f"Completed job {job_id}")
 
     except Exception as e:
@@ -49,8 +58,15 @@ def process_ingestion_requested(message_data: bytes):
             if job is not None:
                 job.status = JobStatus.FAILED
                 job.current_stage = "Failed"
+                job.error_message = str(e)
 
                 db.commit()
+
+                publish_job_failed(
+                    job.job_id,
+                    job.source_id,
+                    str(e)
+                )
 
         except Exception:
             pass

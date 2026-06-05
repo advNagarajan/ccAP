@@ -50,16 +50,8 @@ VALID_STATUSES = {
 }
 
 
-@router.post(
-    "/configurations",
-    response_model=ConfigurationCreateResponse,
-    status_code=201
-)
-async def create_configuration(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db)
-):
-
+@router.post("/configurations", response_model=ConfigurationCreateResponse, status_code=201)
+async def create_configuration(file: UploadFile = File(...), db: Session = Depends(get_db)):
     if not (
         file.filename.endswith(".yaml")
         or file.filename.endswith(".yml")
@@ -154,14 +146,8 @@ async def create_configuration(
     }
 
 
-@router.get(
-    "/configurations",
-    response_model=list[ConfigurationResponse]
-)
-def get_configurations(
-    db: Session = Depends(get_db)
-):
-
+@router.get("/configurations", response_model=list[ConfigurationResponse])
+def get_configurations(db: Session = Depends(get_db)):
     configurations = db.execute(
         select(ProcessingConfiguration).where(
             ProcessingConfiguration.status
@@ -172,15 +158,8 @@ def get_configurations(
     return configurations
 
 
-@router.get(
-    "/configurations/{config_id}",
-    response_model=ConfigurationResponse
-)
-def get_configuration(
-    config_id: UUID,
-    db: Session = Depends(get_db)
-):
-
+@router.get("/configurations/{config_id}",response_model=ConfigurationResponse)
+def get_configuration(config_id: UUID, db: Session = Depends(get_db)):
     configuration = db.get(
         ProcessingConfiguration,
         config_id
@@ -194,16 +173,8 @@ def get_configuration(
 
     return configuration
 
-@router.patch(
-    "/configurations/{config_id}",
-    response_model=ConfigurationResponse
-)
-def update_configuration(
-    config_id: UUID,
-    payload: ConfigurationUpdate,
-    db: Session = Depends(get_db)
-):
-
+@router.patch("/configurations/{config_id}", response_model=ConfigurationResponse)
+def update_configuration(config_id: UUID, payload: ConfigurationUpdate, db: Session = Depends(get_db)):
     configuration = db.get(
         ProcessingConfiguration,
         config_id
@@ -244,15 +215,8 @@ def update_configuration(
 
     return configuration
 
-@router.delete(
-    "/configurations/{config_id}",
-    response_model=ConfigurationResponse
-)
-def delete_configuration(
-    config_id: UUID,
-    db: Session = Depends(get_db)
-):
-
+@router.delete("/configurations/{config_id}", response_model=ConfigurationResponse)
+def delete_configuration(config_id: UUID, db: Session = Depends(get_db)):
     configuration = db.get(
         ProcessingConfiguration,
         config_id

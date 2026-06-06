@@ -1,4 +1,4 @@
-from worker.subscriber import start_subscriber
+from workers.ingestion.subscriber import start_subscriber
 
 
 if __name__ == "__main__":

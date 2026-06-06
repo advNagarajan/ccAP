@@ -1,7 +1,7 @@
 from google.cloud import pubsub_v1
 
 from app.core.settings import settings
-from worker.processor import process_ingestion_requested
+from workers.ingestion.processor import process_ingestion_requested
 
 
 subscriber = pubsub_v1.SubscriberClient()

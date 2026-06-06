@@ -14,9 +14,11 @@ class Settings(BaseSettings):
     GCP_PROJECT_ID: str
 
     PUBSUB_TOPIC_INGESTION_REQUESTED: str
-    PUBSUB_SUBSCRIPTION_INGESTION_REQUESTED: str
+    PUBSUB_TOPIC_DATASET_RECEIVED: str
     PUBSUB_TOPIC_JOB_COMPLETED: str
     PUBSUB_TOPIC_JOB_FAILED: str
+
+    PUBSUB_SUBSCRIPTION_INGESTION_REQUESTED: str
 
     model_config = SettingsConfigDict(
         extra="ignore"

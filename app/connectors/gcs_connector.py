@@ -74,7 +74,7 @@ class GCSConnector(BaseConnector):
             db
         )
 
-    def extract(
+    def extract_sample(
         self,
         source,
         artifact: Artifact
@@ -84,7 +84,9 @@ class GCSConnector(BaseConnector):
 
         object_name = artifact.metadata["object_name"]
 
-        client = storage.Client(project=settings.GCP_PROJECT_ID)
+        client = storage.Client(
+            project=settings.GCP_PROJECT_ID
+        )
 
         bucket = client.bucket(bucket_name)
 
@@ -98,5 +100,37 @@ class GCSConnector(BaseConnector):
             content=content,
             format_type=format_type,
             source_type=source.source_type,
-            source_name=object_name
+            source_name=object_name,
+            connector_metadata=artifact.metadata
+        )
+
+
+    def extract_full(
+        self,
+        source,
+        artifact: Artifact
+    ) -> RawData:
+
+        bucket_name = artifact.metadata["bucket"]
+
+        object_name = artifact.metadata["object_name"]
+
+        client = storage.Client(
+            project=settings.GCP_PROJECT_ID
+        )
+
+        bucket = client.bucket(bucket_name)
+
+        blob = bucket.blob(object_name)
+
+        content = blob.download_as_text()
+
+        format_type = object_name.split(".")[-1].upper()
+
+        return RawData(
+            content=content,
+            format_type=format_type,
+            source_type=source.source_type,
+            source_name=object_name,
+            connector_metadata=artifact.metadata
         )

@@ -23,7 +23,15 @@ class BaseConnector(ABC):
         pass
 
     @abstractmethod
-    def extract(
+    def extract_sample(
+        self,
+        source,
+        artifact: Artifact
+    ) -> RawData:
+        pass
+
+    @abstractmethod
+    def extract_full(
         self,
         source,
         artifact: Artifact

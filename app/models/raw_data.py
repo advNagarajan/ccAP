@@ -7,3 +7,4 @@ class RawData:
     format_type: str
     source_type: str
     source_name: str
+    connector_metadata: dict

@@ -40,6 +40,22 @@ def publish_ingestion_requested(job_id, source_id):
         payload
     )
 
+def publish_dataset_received(
+    job_id,
+    source_id,
+    artifact_external_id
+):
+    payload = {
+        "job_id": str(job_id),
+        "source_id": str(source_id),
+        "artifact_external_id": artifact_external_id
+    }
+
+    return publish_event(
+        settings.PUBSUB_TOPIC_DATASET_RECEIVED,
+        payload
+    )
+
 def publish_job_completed(job_id, source_id):
     payload = {
         "job_id": str(job_id),

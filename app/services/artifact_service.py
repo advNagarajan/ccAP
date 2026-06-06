@@ -27,13 +27,8 @@ def get_unprocessed_artifacts(
         if record is None:
             continue
 
-        if record.status in (
-            "DISCOVERED",
-            "FAILED"
-        ):
-            unprocessed.append(
-                artifact
-            )
+        if record.status in ("DISCOVERED", "FAILED"):
+            unprocessed.append(artifact)
 
     return unprocessed
 
@@ -69,22 +64,6 @@ def mark_discovered(
     db.refresh(record)
 
     return record
-
-
-def register_artifacts(
-    source_id,
-    artifacts: list[Artifact],
-    db: Session
-):
-
-    for artifact in artifacts:
-
-        mark_discovered(
-            source_id,
-            artifact,
-            db
-        )
-
 
 def discover_new_artifacts(
     source_id,

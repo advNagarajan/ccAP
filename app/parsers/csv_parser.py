@@ -10,9 +10,7 @@ class CsvParser(BaseParser):
 
     def parse(self, raw_data: RawData) -> Dataset:
 
-        reader = csv.DictReader(
-            StringIO(raw_data.content)
-        )
+        reader = csv.DictReader(StringIO(raw_data.content))
 
         records = list(reader)
 

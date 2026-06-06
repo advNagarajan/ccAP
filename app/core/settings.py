@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     PUBSUB_TOPIC_JOB_FAILED: str
 
     PUBSUB_SUBSCRIPTION_INGESTION_REQUESTED: str
+    PUBSUB_SUBSCRIPTION_DATASET_RECEIVED: str
 
     model_config = SettingsConfigDict(
         extra="ignore"

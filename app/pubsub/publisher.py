@@ -56,6 +56,23 @@ def publish_dataset_received(
         payload
     )
 
+def publish_metadata_extracted(
+    artifact_id,
+    metadata_profile_id
+):
+
+    payload = {
+        "artifact_id": str(artifact_id),
+        "metadata_profile_id": str(
+            metadata_profile_id
+        )
+    }
+
+    return publish_event(
+        settings.PUBSUB_TOPIC_METADATA_EXTRACTED,
+        payload
+    )
+
 def publish_job_completed(job_id, source_id):
     payload = {
         "job_id": str(job_id),

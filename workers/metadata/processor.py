@@ -16,6 +16,9 @@ from app.services.metadata_service import (
     save_metadata
 )
 
+from app.pubsub.publisher import (
+    publish_metadata_extracted
+)
 
 def process_dataset_received(
     message_data: bytes
@@ -124,6 +127,11 @@ def process_dataset_received(
                 metadata
             ),
             db
+        )
+
+        publish_metadata_extracted(
+            artifact_record.artifact_id,
+            profile.metadata_profile_id
         )
 
         print()

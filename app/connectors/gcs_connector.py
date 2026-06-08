@@ -134,3 +134,40 @@ class GCSConnector(BaseConnector):
             source_name=object_name,
             connector_metadata=artifact.metadata
         )
+
+
+    def get_artifact(
+        self,
+        source,
+        artifact_external_id: str
+    ) -> Artifact | None:
+
+        object_name = artifact_external_id.split(":")[0]
+
+        connection_details = source.connection_details
+
+        bucket_name = connection_details["bucket"]
+
+        client = storage.Client(
+            project=settings.GCP_PROJECT_ID
+        )
+
+        bucket = client.bucket(bucket_name)
+
+        blob = bucket.get_blob(object_name)
+
+        if blob is None:
+            return None
+
+        return Artifact(
+            external_id=f"{blob.name}:{blob.generation}",
+            artifact_name=blob.name,
+            last_modified=blob.updated.isoformat(),
+            metadata={
+                "bucket": bucket_name,
+                "object_name": blob.name,
+                "generation": str(blob.generation),
+                "size": blob.size,
+                "etag": blob.etag
+            }
+        )

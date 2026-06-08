@@ -58,3 +58,5 @@ class DatasetMetadata:
     structure: StructureMetadata
 
     connector_metadata: dict[str, object]
+
+    sample_records: list[dict]

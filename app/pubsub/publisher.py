@@ -57,11 +57,13 @@ def publish_dataset_received(
     )
 
 def publish_metadata_extracted(
+    job_id,
     artifact_id,
     metadata_profile_id
 ):
 
     payload = {
+        "job_id": str(job_id),
         "artifact_id": str(artifact_id),
         "metadata_profile_id": str(
             metadata_profile_id

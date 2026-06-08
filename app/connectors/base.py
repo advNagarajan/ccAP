@@ -37,3 +37,11 @@ class BaseConnector(ABC):
         artifact: Artifact
     ) -> RawData:
         pass
+    
+    @abstractmethod
+    def get_artifact(
+        self,
+        source,
+        artifact_external_id: str
+    ) -> Artifact | None:
+        pass

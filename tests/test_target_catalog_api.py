@@ -1,7 +1,72 @@
 import uuid
+from datetime import datetime
+from unittest.mock import MagicMock
 from fastapi.testclient import TestClient
-from app.main import app
 
+from app.main import app
+from app.db.session import get_db
+from app.models.target_catalog import TargetCatalog
+
+# Create mock DB session
+mock_db = MagicMock()
+
+# Keep track of targets in an in-memory dictionary to mock listing and fetching
+mock_targets_db = {}
+
+def mock_add(instance):
+    if isinstance(instance, TargetCatalog):
+        if not getattr(instance, "target_id", None):
+            instance.target_id = uuid.uuid4()
+        if not getattr(instance, "created_at", None):
+            instance.created_at = datetime.utcnow()
+        if not getattr(instance, "updated_at", None):
+            instance.updated_at = datetime.utcnow()
+        if not getattr(instance, "target_status", None):
+            instance.target_status = "ACTIVE"
+        mock_targets_db[instance.target_id] = instance
+        print(f"DEBUG mock_add: added target {instance.target_name} status={instance.target_status}")
+
+mock_db.add = mock_add
+
+def mock_get(model_class, ident):
+    if model_class == TargetCatalog:
+        if isinstance(ident, str):
+            ident = uuid.UUID(ident)
+        return mock_targets_db.get(ident)
+    return None
+
+mock_db.get = mock_get
+
+def mock_execute(statement):
+    result_mock = MagicMock()
+    stmt_str = str(statement).lower()
+    
+    # Check if this is a query checking for target_name in WHERE clause
+    # e.g., "where metadata.target_catalog.target_name = :target_name_1"
+    if "target_name =" in stmt_str or "target_name=" in stmt_str:
+        # Duplicate check query
+        if mock_targets_db:
+            existing = list(mock_targets_db.values())[0]
+            result_mock.scalar_one_or_none.return_value = existing
+        else:
+            result_mock.scalar_one_or_none.return_value = None
+    else:
+        # Listing query
+        active_targets = [t for t in mock_targets_db.values() if t.target_status == "ACTIVE"]
+        result_mock.scalars.return_value.all.return_value = active_targets
+
+    return result_mock
+
+mock_db.execute = mock_execute
+
+# Override FastAPI get_db dependency
+def override_get_db():
+    try:
+        yield mock_db
+    finally:
+        pass
+
+app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
 
 created_target_id = None
@@ -71,6 +136,9 @@ print("PASS")
 # TEST 3 - INVALID TARGET TYPE
 #
 print_test("TEST 3 - INVALID TARGET TYPE")
+temp_db = mock_targets_db.copy()
+mock_targets_db.clear()
+
 response = client.post(
     "/targets",
     json={
@@ -80,6 +148,7 @@ response = client.post(
     }
 )
 assert response.status_code == 400, f"Expected 400, got {response.status_code}: {response.text}"
+mock_targets_db.update(temp_db)
 print("PASS")
 
 #

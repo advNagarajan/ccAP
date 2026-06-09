@@ -144,8 +144,9 @@ job_id = str(uuid.uuid4())
 mock_db.get.return_value = mock_target  # Ensure target is found when adding feedback
 
 response = client.post(
-    f"/targets/{target_id}/feedback",
+    "/feedback",
     json={
+        "target_id": target_id,
         "job_id": job_id,
         "observed_flattened_paths": ["tx_id", "amount"],
         "user_action": "ROUTE_TO_MISC",

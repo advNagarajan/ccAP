@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 
 class FeedbackCreate(BaseModel):
+    target_id: UUID
     job_id: UUID
     observed_flattened_paths: list[str]
     user_action: str

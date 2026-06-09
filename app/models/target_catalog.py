@@ -4,6 +4,7 @@ from sqlalchemy import (
     String,
     DateTime,
     Boolean,
+    Text,
     func,
     text
 )
@@ -15,6 +16,7 @@ from sqlalchemy.orm import (
     Mapped,
     mapped_column
 )
+from pgvector.sqlalchemy import Vector
 
 from app.db.base import Base
 
@@ -74,4 +76,19 @@ class TargetCatalog(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         server_default=func.now()
+    )
+
+    description: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True
+    )
+
+    target_passport_text: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True
+    )
+
+    target_embedding: Mapped[list[float] | None] = mapped_column(
+        Vector(768),
+        nullable=True
     )

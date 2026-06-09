@@ -11,11 +11,20 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.target_catalog import TargetCatalog
+from app.models.llm_feedback_loop import LlmFeedbackLoop
 from app.schemas.target import (
     TargetCatalogCreate,
     TargetCatalogCreateResponse,
     TargetCatalogResponse,
     TargetCatalogUpdate
+)
+from app.schemas.feedback import (
+    FeedbackCreate,
+    FeedbackResponse
+)
+from app.pubsub.publisher import (
+    publish_target_mutated,
+    publish_feedback_submitted
 )
 
 router = APIRouter(tags=["Targets"])
@@ -64,12 +73,19 @@ def create_target(
         connection_details=payload.connection_details,
         schema_definition=payload.schema_definition,
         is_system_generated=payload.is_system_generated,
+        description=payload.description,
         target_status="ACTIVE"
     )
 
     db.add(target)
     db.commit()
     db.refresh(target)
+
+    # Trigger async vectorization
+    try:
+        publish_target_mutated(target.target_id)
+    except Exception as e:
+        print(f"Error publishing target-mutated event: {e}")
 
     return target
 
@@ -158,6 +174,12 @@ def update_target(
     db.commit()
     db.refresh(target)
 
+    # Trigger async vectorization
+    try:
+        publish_target_mutated(target.target_id)
+    except Exception as e:
+        print(f"Error publishing target-mutated event: {e}")
+
     return target
 
 
@@ -182,3 +204,47 @@ def delete_target(
     db.commit()
 
     return Response(status_code=204)
+
+
+@router.post(
+    "/targets/{target_id}/feedback",
+    response_model=FeedbackResponse,
+    status_code=201
+)
+def submit_feedback(
+    target_id: UUID,
+    payload: FeedbackCreate,
+    db: Session = Depends(get_db)
+):
+    target = db.get(TargetCatalog, target_id)
+
+    if target is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Target not found"
+        )
+
+    feedback = LlmFeedbackLoop(
+        job_id=payload.job_id,
+        target_id=target_id,
+        observed_flattened_paths=payload.observed_flattened_paths,
+        user_action=payload.user_action,
+        engineer_notes=payload.engineer_notes
+    )
+
+    db.add(feedback)
+    db.commit()
+    db.refresh(feedback)
+
+    # Trigger async feedback loops
+    try:
+        publish_feedback_submitted(
+            job_id=feedback.job_id,
+            target_id=target_id,
+            user_action=feedback.user_action,
+            notes=feedback.engineer_notes
+        )
+    except Exception as e:
+        print(f"Error publishing feedback-submitted event: {e}")
+
+    return feedback

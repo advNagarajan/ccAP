@@ -98,3 +98,28 @@ def publish_job_failed(job_id, source_id, error_message):
         settings.PUBSUB_TOPIC_JOB_FAILED,
         payload
     )
+
+
+def publish_target_mutated(target_id):
+    payload = {
+        "target_id": str(target_id)
+    }
+
+    return publish_event(
+        settings.PUBSUB_TOPIC_TARGET_MUTATED,
+        payload
+    )
+
+
+def publish_feedback_submitted(job_id, target_id, user_action, notes):
+    payload = {
+        "job_id": str(job_id),
+        "target_id": str(target_id),
+        "user_action": user_action,
+        "notes": notes
+    }
+
+    return publish_event(
+        settings.PUBSUB_TOPIC_FEEDBACK_SUBMITTED,
+        payload
+    )

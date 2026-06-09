@@ -10,6 +10,7 @@ class TargetCatalogCreate(BaseModel):
     connection_details: dict
     schema_definition: dict | None = None
     is_system_generated: bool = False
+    description: str | None = None
 
 
 class TargetCatalogCreateResponse(BaseModel):
@@ -34,6 +35,9 @@ class TargetCatalogResponse(BaseModel):
     is_system_generated: bool
     created_at: datetime
     updated_at: datetime
+    description: str | None = None
+    target_passport_text: str | None = None
+    target_embedding: list[float] | None = None
 
     class Config:
         from_attributes = True
@@ -47,3 +51,4 @@ class TargetCatalogUpdate(BaseModel):
     schema_definition: dict | None = None
     target_status: str | None = None
     is_system_generated: bool | None = None
+    description: str | None = None

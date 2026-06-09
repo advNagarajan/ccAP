@@ -256,12 +256,14 @@ def metadata_to_dict(
 
 
 def save_metadata(
+    job_id,
     artifact_id,
     metadata,
     db: Session
 ):
 
     profile = MetadataProfile(
+        job_id=job_id,
         artifact_id=artifact_id,
         metadata_json=metadata
     )

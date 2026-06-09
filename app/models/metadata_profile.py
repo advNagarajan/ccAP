@@ -18,6 +18,14 @@ class MetadataProfile(Base):
         default=uuid4
     )
 
+    job_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "metadata.jobs.job_id"
+        ),
+        nullable=False
+    )
+
     artifact_id: Mapped[str] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey(

@@ -118,6 +118,7 @@ def process_dataset_received(message_data: bytes):
         )
 
         profile = save_metadata(
+            job_id,
             artifact_record.artifact_id,
             metadata_to_dict(metadata),
             db

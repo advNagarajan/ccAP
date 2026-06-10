@@ -123,3 +123,22 @@ def publish_feedback_submitted(job_id, target_id, user_action, notes):
         settings.PUBSUB_TOPIC_FEEDBACK_SUBMITTED,
         payload
     )
+
+
+def publish_metadata_vectorized(
+    job_id,
+    artifact_id,
+    metadata_profile_id
+):
+    payload = {
+        "job_id": str(job_id),
+        "artifact_id": str(artifact_id),
+        "metadata_profile_id": str(
+            metadata_profile_id
+        )
+    }
+
+    return publish_event(
+        settings.PUBSUB_TOPIC_METADATA_VECTORIZED,
+        payload
+    )

@@ -255,6 +255,97 @@ def metadata_to_dict(
     return asdict(metadata)
 
 
+def generate_embedding_optimized_text(
+    raw_metadata: dict
+) -> str:
+    """
+    Compiles a deterministic, embedding-optimized natural language description
+    (passport) for a metadata profile to match target passports for cosine similarity.
+    """
+    passport_parts = []
+
+    # 1. Identity Context
+    object_name = raw_metadata.get("connector_metadata", {}).get("object_name", "Unknown Dataset")
+    if "/" in object_name:
+        object_name = object_name.split("/")[-1]
+    if "." in object_name:
+        object_name = object_name.split(".")[0]
+    asset_name = object_name.replace("_", " ").replace("-", " ").title()
+    passport_parts.append(f"Source Dataset Asset: {asset_name}")
+
+    # 2. Schema Structure
+    columns = raw_metadata.get("columns", [])
+    if columns:
+        passport_parts.append("Structure Schema Fields:")
+        
+        # Grouping columns: check if they have "parent", otherwise default to "General Schema Columns"
+        grouped_fields = {}
+        for col in columns:
+            parent = col.get("parent") or "General Schema Columns"
+            parent_title = parent.replace("_", " ").title()
+            grouped_fields.setdefault(parent_title, []).append(col)
+            
+        for parent_title, col_list in sorted(grouped_fields.items()):
+            passport_parts.append(f"  Under {parent_title}:")
+            for col in col_list:
+                col_name = col.get("name", "").replace("_", " ").title()
+                observed_types = col.get("observed_types", [])
+                col_type = "/".join(observed_types).upper() if observed_types else "UNKNOWN"
+                
+                tags = []
+                if col.get("is_unique"):
+                    tags.append("(unique identifier)")
+                if col.get("presence_percentage") == 100.0:
+                    tags.append("(present in 100% of records)")
+                    
+                tag_suffix = " " + " ".join(tags) if tags else ""
+                passport_parts.append(f"    - Column Name: {col_name}, Data Type: {col_type}{tag_suffix}")
+
+    return "\n".join(passport_parts)
+
+
+def generate_llm_optimized_json(
+    raw_metadata: dict
+) -> dict:
+    """
+    Generates a simplified, token-efficient representation of metadata
+    for LLM prompt usage, stripping operational noise.
+    """
+    stats = raw_metadata.get("statistics", {})
+    optimized_stats = {
+        "row_count": stats.get("row_count"),
+        "column_count": stats.get("column_count")
+    }
+    
+    optimized_columns = []
+    for col in raw_metadata.get("columns", []):
+        opt_col = {
+            "name": col.get("name"),
+            "observed_types": col.get("observed_types"),
+            "is_unique": col.get("is_unique"),
+            "presence_percentage": col.get("presence_percentage"),
+            "sample_values": col.get("sample_values", [])
+        }
+        for key in ["min_value", "max_value", "average_length", "numeric_statistics"]:
+            if col.get(key) is not None:
+                opt_col[key] = col.get(key)
+        optimized_columns.append(opt_col)
+        
+    struct = raw_metadata.get("structure", {})
+    optimized_struct = {
+        "nested_fields": struct.get("nested_fields", []),
+        "array_fields": struct.get("array_fields", []),
+        "flattened_paths": struct.get("flattened_paths", []),
+        "max_depth": struct.get("max_depth", 0)
+    }
+    
+    return {
+        "statistics": optimized_stats,
+        "columns": optimized_columns,
+        "structure": optimized_struct
+    }
+
+
 def save_metadata(
     job_id,
     artifact_id,
@@ -262,10 +353,13 @@ def save_metadata(
     db: Session
 ):
 
+    embedding_text = generate_embedding_optimized_text(metadata)
+
     profile = MetadataProfile(
         job_id=job_id,
         artifact_id=artifact_id,
-        metadata_json=metadata
+        metadata_json=metadata,
+        embedding_optimized_text=embedding_text
     )
 
     db.add(profile)

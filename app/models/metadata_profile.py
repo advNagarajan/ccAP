@@ -1,9 +1,10 @@
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import DateTime, ForeignKey, func
+from sqlalchemy import DateTime, ForeignKey, func, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
+from pgvector.sqlalchemy import Vector
 
 from app.db.base import Base
 
@@ -42,4 +43,14 @@ class MetadataProfile(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         server_default=func.now()
+    )
+
+    embedding_optimized_text: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True
+    )
+
+    source_embedding: Mapped[list[float] | None] = mapped_column(
+        Vector(768),
+        nullable=True
     )

@@ -1,0 +1,58 @@
+import json
+import asyncio
+import logging
+from google.cloud import pubsub_v1
+
+from app.core.settings import settings
+from app.db.database import SessionLocal
+from workers.vectorizers.metadata_vectorizer.processor import (
+    sync_metadata_vector
+)
+
+logger = logging.getLogger("metadata_vectorizer")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+
+
+def callback_metadata_extracted(message):
+    try:
+        logger.info(f"Received metadata extracted message: {message.message_id}")
+        payload = json.loads(message.data.decode("utf-8"))
+        job_id = payload["job_id"]
+        artifact_id = payload["artifact_id"]
+        metadata_profile_id = payload["metadata_profile_id"]
+
+        db = SessionLocal()
+        try:
+            # Execute async pipeline in event loop
+            asyncio.run(sync_metadata_vector(job_id, artifact_id, metadata_profile_id, db))
+            message.ack()
+            logger.info(f"Acknowledged metadata extracted message: {message.message_id}")
+        finally:
+            db.close()
+
+    except Exception as e:
+        logger.error(f"Failed to process metadata extracted message: {e}")
+        message.nack()
+
+
+def start_subscriber():
+    subscriber = pubsub_v1.SubscriberClient()
+
+    metadata_sub_path = subscriber.subscription_path(
+        settings.GCP_PROJECT_ID,
+        settings.PUBSUB_SUBSCRIPTION_METADATA_EXTRACTED
+    )
+
+    logger.info(f"Subscribing to metadata extracted: {metadata_sub_path}")
+    metadata_future = subscriber.subscribe(
+        metadata_sub_path,
+        callback=callback_metadata_extracted
+    )
+
+    try:
+        # Keep main thread alive while future runs in background threads
+        logger.info("Metadata Vectorizer Worker started. Listening on subscriptions...")
+        metadata_future.result()
+    except KeyboardInterrupt:
+        metadata_future.cancel()
+        logger.info("Metadata Vectorizer Worker stopped.")

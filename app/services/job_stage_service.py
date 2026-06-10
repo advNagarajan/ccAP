@@ -41,6 +41,8 @@ def complete_stage(stage_history_id, db: Session, details=None):
 
 def fail_stage(stage_history_id, reason, db: Session):
 
+    import traceback
+
     record = db.get(JobStageHistory, stage_history_id)
 
     if record is None:
@@ -51,6 +53,7 @@ def fail_stage(stage_history_id, reason, db: Session):
 
     existing_details = record.details or {}
     existing_details["error"] = str(reason)
+    existing_details["traceback"] = traceback.format_exc()
 
     record.details = existing_details
 

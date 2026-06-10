@@ -49,33 +49,65 @@ def process_ingestion_requested(message_data: bytes):
 
         db.commit()
 
+        details = {
+            "connector_name": "UNKNOWN",
+            "artifact_count": 0,
+            "steps": {
+                "loading_source": "PENDING",
+                "artifact_discovery": "PENDING"
+            },
+            "artifacts": []
+        }
+
         acq_stage = start_stage(
             job.job_id,
             "Dataset Acquisition",
-            db
+            db,
+            details=details
         )
 
         source = db.get(Source, job.source_id)
 
         if source is None:
+            details["steps"]["loading_source"] = "FAILED"
+            acq_stage.details = details
+            db.commit()
             raise Exception("Source not found")
+
+        details["connector_name"] = source.source_type
+        details["steps"]["loading_source"] = "COMPLETED"
+        acq_stage.details = details
+        db.commit()
 
         connector = CONNECTORS.get(source.source_type)
 
         if connector is None:
+            details["steps"]["artifact_discovery"] = "FAILED"
+            acq_stage.details = details
+            db.commit()
             raise Exception(f"No connector registered for {source.source_type}")
 
         job.current_stage = "Discovering Artifacts"
 
         db.commit()
 
-        artifacts = connector.list_artifacts(source)
+        try:
+            artifacts = connector.list_artifacts(source)
 
-        unprocessed_artifacts = connector.get_unprocessed_artifacts(
-            source,
-            artifacts,
-            db
-        )
+            unprocessed_artifacts = connector.get_unprocessed_artifacts(
+                source,
+                artifacts,
+                db
+            )
+            details["steps"]["artifact_discovery"] = "COMPLETED"
+            details["artifact_count"] = len(unprocessed_artifacts)
+            acq_stage.details = details
+            db.commit()
+        except Exception as disc_err:
+            details["steps"]["artifact_discovery"] = "FAILED"
+            acq_stage.details = details
+            db.commit()
+            raise disc_err
 
         if not unprocessed_artifacts:
 
@@ -91,10 +123,7 @@ def process_ingestion_requested(message_data: bytes):
             complete_stage(
                 acq_stage.stage_history_id,
                 db,
-                {
-                    "connector_name": source.source_type,
-                    "artifact_count": 0
-                }
+                details
             )
 
             return
@@ -102,6 +131,14 @@ def process_ingestion_requested(message_data: bytes):
         total_records = 0
 
         for artifact in unprocessed_artifacts:
+            artifact_info = {
+                "name": artifact.artifact_name,
+                "external_id": artifact.external_id,
+                "status": "PENDING"
+            }
+            details["artifacts"].append(artifact_info)
+            acq_stage.details = details
+            db.commit()
 
             try:
 
@@ -132,12 +169,21 @@ def process_ingestion_requested(message_data: bytes):
                     artifact.external_id
                 )
 
+                artifact_info["status"] = "COMPLETED"
+                artifact_info["record_count"] = record_count
+                acq_stage.details = details
+                db.commit()
+
                 print(
                     f"Processed {artifact.artifact_name} "
                     f"({record_count} records)"
                 )
 
             except Exception as artifact_error:
+                artifact_info["status"] = "FAILED"
+                artifact_info["error"] = str(artifact_error)
+                acq_stage.details = details
+                db.commit()
 
                 mark_failed(
                     source.source_id,
@@ -164,10 +210,7 @@ def process_ingestion_requested(message_data: bytes):
         complete_stage(
             acq_stage.stage_history_id,
             db,
-            {
-                "connector_name": source.source_type,
-                "artifact_count": len(unprocessed_artifacts)
-            }
+            details
         )
 
         print(

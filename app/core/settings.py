@@ -22,10 +22,10 @@ class Settings(BaseSettings):
     PUBSUB_SUBSCRIPTION_INGESTION_REQUESTED: str
     PUBSUB_SUBSCRIPTION_DATASET_RECEIVED: str
 
-    PUBSUB_TOPIC_TARGET_MUTATED: str = "target-mutated"
-    PUBSUB_TOPIC_FEEDBACK_SUBMITTED: str = "feedback-submitted"
-    PUBSUB_SUBSCRIPTION_TARGET_MUTATED: str = "target-mutated-sub"
-    PUBSUB_SUBSCRIPTION_FEEDBACK_SUBMITTED: str = "feedback-submitted-sub"
+    PUBSUB_TOPIC_TARGET_MUTATED: str
+    PUBSUB_TOPIC_FEEDBACK_SUBMITTED: str
+    PUBSUB_SUBSCRIPTION_TARGET_MUTATED: str
+    PUBSUB_SUBSCRIPTION_FEEDBACK_SUBMITTED: str
 
     model_config = SettingsConfigDict(
         extra="ignore"

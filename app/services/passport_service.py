@@ -6,6 +6,7 @@ from google import genai
 
 from app.models.target_catalog import TargetCatalog
 from app.models.llm_feedback_loop import LlmFeedbackLoop
+from app.core.settings import settings
 
 logger = logging.getLogger("vector_sync")
 
@@ -86,15 +87,15 @@ async def get_vector_embedding(text: str) -> List[float]:
     """
     Retrieves dense vector representation from Google GenAI embedding model (text-embedding-004).
     """
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    api_key = settings.GEMINI_API_KEY
     if not api_key:
-        logger.warning("No GEMINI_API_KEY or GOOGLE_API_KEY found in environment variables. Falling back to mock vector.")
+        logger.warning("No GEMINI_API_KEY found in settings. Falling back to mock vector.")
         # Return a deterministic mock vector of 768 dimensions for testing/fallback
         return [0.0] * 768
 
     try:
-        # Initialize the GenAI Client (reads API key from environment automatically)
-        client = genai.Client()
+        # Initialize the GenAI Client with settings API key
+        client = genai.Client(api_key=api_key)
         
         # Execute the call in an executor to keep it async friendly
         response = await asyncio.to_thread(

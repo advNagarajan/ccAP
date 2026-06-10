@@ -5,7 +5,7 @@ from google.cloud import pubsub_v1
 
 from app.core.settings import settings
 from app.db.database import SessionLocal
-from workers.vector_sync.processor import (
+from workers.vectorizers.target_vectorizer.processor import (
     sync_target_vector_on_mutation,
     append_feedback_and_revectorize
 )

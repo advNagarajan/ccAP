@@ -8,7 +8,7 @@ from app.main import app
 from app.db.session import get_db
 from app.models.target_catalog import TargetCatalog
 from app.models.llm_feedback_loop import LlmFeedbackLoop
-from workers.vector_sync.processor import (
+from workers.vectorizers.target_vectorizer.processor import (
     sync_target_vector_on_mutation,
     append_feedback_and_revectorize
 )
@@ -117,7 +117,7 @@ mock_db.get.return_value = mock_target
 mock_db.scalars.return_value.all.return_value = []  # No feedback logs initially
 
 mock_vector = [0.01] * 768
-with patch("workers.vector_sync.processor.get_vector_embedding", new_callable=AsyncMock) as mock_embed:
+with patch("workers.vectorizers.target_vectorizer.processor.get_vector_embedding", new_callable=AsyncMock) as mock_embed:
     mock_embed.return_value = mock_vector
 
     # Execute mutation processing worker
@@ -170,7 +170,7 @@ mock_feedback = LlmFeedbackLoop(
 mock_db.scalars.return_value.all.return_value = [mock_feedback]
 
 mock_vector = [0.02] * 768
-with patch("workers.vector_sync.processor.get_vector_embedding", new_callable=AsyncMock) as mock_embed:
+with patch("workers.vectorizers.target_vectorizer.processor.get_vector_embedding", new_callable=AsyncMock) as mock_embed:
     mock_embed.return_value = mock_vector
 
     # Execute feedback loop processing worker

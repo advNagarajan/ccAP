@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     PUBSUB_SUBSCRIPTION_TARGET_MUTATED: str
     PUBSUB_SUBSCRIPTION_FEEDBACK_SUBMITTED: str
 
+    GEMINI_API_KEY: str | None = None
+
     model_config = SettingsConfigDict(
         extra="ignore"
     )

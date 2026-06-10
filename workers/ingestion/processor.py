@@ -49,9 +49,9 @@ def process_ingestion_requested(message_data: bytes):
 
         db.commit()
 
-        loading_stage = start_stage(
+        acq_stage = start_stage(
             job.job_id,
-            "Loading Source",
+            "Dataset Acquisition",
             db
         )
 
@@ -59,11 +59,6 @@ def process_ingestion_requested(message_data: bytes):
 
         if source is None:
             raise Exception("Source not found")
-
-        complete_stage(
-            loading_stage.stage_history_id,
-            db
-        )
 
         connector = CONNECTORS.get(source.source_type)
 
@@ -74,24 +69,12 @@ def process_ingestion_requested(message_data: bytes):
 
         db.commit()
 
-        artifact_stage = start_stage(
-            job.job_id,
-            "Artifact Discovery",
-            db
-        )
-
         artifacts = connector.list_artifacts(source)
 
         unprocessed_artifacts = connector.get_unprocessed_artifacts(
             source,
             artifacts,
             db
-        )
-
-        complete_stage(
-            artifact_stage.stage_history_id,
-            db,
-            {"artifact_count": len(unprocessed_artifacts)}
         )
 
         if not unprocessed_artifacts:
@@ -105,25 +88,26 @@ def process_ingestion_requested(message_data: bytes):
 
             db.commit()
 
+            complete_stage(
+                acq_stage.stage_history_id,
+                db,
+                {
+                    "connector_name": source.source_type,
+                    "artifact_count": 0
+                }
+            )
+
             return
 
         total_records = 0
 
         for artifact in unprocessed_artifacts:
 
-            processing_stage = None
-
             try:
 
                 job.current_stage = f"Processing {artifact.artifact_name}"
 
                 db.commit()
-
-                processing_stage = start_stage(
-                    job.job_id,
-                    f"Processing {artifact.artifact_name}",
-                    db
-                )
 
                 raw_data = connector.extract_sample(
                     source,
@@ -148,28 +132,12 @@ def process_ingestion_requested(message_data: bytes):
                     artifact.external_id
                 )
 
-                complete_stage(
-                    processing_stage.stage_history_id,
-                    db,
-                    {
-                        "record_count": record_count,
-                        "artifact_external_id": artifact.external_id
-                    }
-                )
-
                 print(
                     f"Processed {artifact.artifact_name} "
                     f"({record_count} records)"
                 )
 
             except Exception as artifact_error:
-
-                if processing_stage is not None:
-                    fail_stage(
-                        processing_stage.stage_history_id,
-                        artifact_error,
-                        db
-                    )
 
                 mark_failed(
                     source.source_id,
@@ -193,6 +161,15 @@ def process_ingestion_requested(message_data: bytes):
 
         db.commit()
 
+        complete_stage(
+            acq_stage.stage_history_id,
+            db,
+            {
+                "connector_name": source.source_type,
+                "artifact_count": len(unprocessed_artifacts)
+            }
+        )
+
         print(
             f"Published dataset.received for "
             f"{len(unprocessed_artifacts)} artifacts"
@@ -201,6 +178,16 @@ def process_ingestion_requested(message_data: bytes):
     except Exception as e:
 
         print(f"Failed job {job_id}: {e}")
+
+        if 'acq_stage' in locals() and acq_stage is not None:
+            try:
+                fail_stage(
+                    acq_stage.stage_history_id,
+                    e,
+                    db
+                )
+            except Exception:
+                pass
 
         try:
 

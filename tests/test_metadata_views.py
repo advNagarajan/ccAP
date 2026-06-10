@@ -120,15 +120,24 @@ def test_sync_metadata_vector_processor():
         mock_vector = [0.123] * 768
         
         with patch("workers.vectorizers.metadata_vectorizer.processor.get_vector_embedding", new_callable=AsyncMock) as mock_embed, \
-             patch("workers.vectorizers.metadata_vectorizer.processor.publish_metadata_vectorized") as mock_publish:
+             patch("workers.vectorizers.metadata_vectorizer.processor.publish_metadata_vectorized") as mock_publish, \
+             patch("workers.vectorizers.metadata_vectorizer.processor.start_stage") as mock_start_stage, \
+             patch("workers.vectorizers.metadata_vectorizer.processor.complete_stage") as mock_complete_stage:
              
             mock_embed.return_value = mock_vector
+            mock_stage = MagicMock()
+            mock_stage.stage_history_id = uuid.uuid4()
+            mock_start_stage.return_value = mock_stage
             
             await sync_metadata_vector(job_id, artifact_id, profile_id, mock_db)
             
             assert profile.embedding_optimized_text is not None
             assert profile.source_embedding == mock_vector
             mock_db.commit.assert_called_once()
+            
+            mock_start_stage.assert_called_once_with(uuid.UUID(job_id), "Metadata Vectorization", mock_db)
+            mock_complete_stage.assert_called_once_with(mock_stage.stage_history_id, mock_db)
+            
             mock_publish.assert_called_once_with(
                 job_id=job_id,
                 artifact_id=artifact_id,

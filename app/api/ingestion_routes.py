@@ -20,6 +20,7 @@ from app.schemas.ingestion import (
     IngestionResponse
 )
 
+from app.services.job_stage_service import start_stage, complete_stage, fail_stage
 from app.pubsub.publisher import publish_ingestion_requested
 
 router = APIRouter(tags=["Ingestions"])
@@ -56,9 +57,19 @@ def create_ingestion(
 
     db.refresh(job)
 
-    publish_ingestion_requested(
-        job.job_id,
-        job.source_id
-    )
+    stage = start_stage(job.job_id, "Ingestion Trigger", db)
+
+    try:
+        publish_ingestion_requested(
+            job.job_id,
+            job.source_id
+        )
+        complete_stage(stage.stage_history_id, db)
+    except Exception as e:
+        fail_stage(stage.stage_history_id, e, db)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to publish ingestion request: {e}"
+        )
 
     return job

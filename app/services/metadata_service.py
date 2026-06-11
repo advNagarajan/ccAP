@@ -357,7 +357,28 @@ def generate_target_llm_optimized_json(
     for LLM prompt usage.
     """
     schema_def = getattr(target, "schema_definition", None) or {}
-    fields = schema_def.get("fields", [])
+    fields = []
+    if isinstance(schema_def, dict):
+        if "fields" in schema_def and isinstance(schema_def["fields"], list):
+            fields = schema_def["fields"]
+        else:
+            # Handle key-value columns structure
+            for col_name, col_type in schema_def.items():
+                if isinstance(col_type, str):
+                    fields.append({
+                        "name": col_name,
+                        "type": col_type
+                    })
+                elif isinstance(col_type, dict):
+                    fields.append({
+                        "name": col_name,
+                        "type": col_type.get("type", "UNKNOWN"),
+                        "primary_key": col_type.get("primary_key", False),
+                        "nullable": col_type.get("nullable", True),
+                        "is_unique": col_type.get("is_unique", False)
+                    })
+    elif isinstance(schema_def, list):
+        fields = schema_def
     
     optimized_fields = []
     for f in fields:

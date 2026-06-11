@@ -12,7 +12,11 @@ DATABASE_URL = (
     f"{settings.DB_NAME}"
 )
 
-engine = create_engine(DATABASE_URL)
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    pool_recycle=1800
+)
 
 @event.listens_for(engine, "connect")
 def connect(dbapi_connection, connection_record):

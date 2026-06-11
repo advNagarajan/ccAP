@@ -65,7 +65,7 @@ async def infer_target_landing_zone(
         logger.error(f"MetadataProfile record not found: {profile_uuid}")
         return
 
-    if not profile.source_embedding:
+    if profile.source_embedding is None:
         logger.error(f"MetadataProfile has no embedding vectorized yet: {profile_uuid}")
         return
 
@@ -138,11 +138,13 @@ async def infer_target_landing_zone(
 
         # 4. Invoke LLM Provider
         llm_provider = get_llm_provider()
+        logger.info(f"Full Target Inference Prompt:\n{prompt}")
         logger.info("Sending prompt to generative LLM provider.")
         response_text = await llm_provider.generate_response(
             prompt=prompt,
             response_schema=InferenceResponseSchema
         )
+        logger.info(f"Raw LLM Structured Response:\n{response_text}")
         
         # Parse output
         res_json = json.loads(response_text)

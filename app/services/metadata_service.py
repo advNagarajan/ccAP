@@ -309,7 +309,7 @@ def generate_llm_optimized_json(
 ) -> dict:
     """
     Generates a simplified, token-efficient representation of metadata
-    for LLM prompt usage, stripping operational noise.
+    for LLM prompt usage, ensuring no crucial semantic information is lost.
     """
     stats = raw_metadata.get("statistics", {})
     optimized_stats = {
@@ -324,6 +324,9 @@ def generate_llm_optimized_json(
             "observed_types": col.get("observed_types"),
             "is_unique": col.get("is_unique"),
             "presence_percentage": col.get("presence_percentage"),
+            "null_count": col.get("null_count"),
+            "non_null_count": col.get("non_null_count"),
+            "distinct_count": col.get("distinct_count"),
             "sample_values": col.get("sample_values", [])
         }
         for key in ["min_value", "max_value", "average_length", "numeric_statistics"]:
@@ -343,6 +346,43 @@ def generate_llm_optimized_json(
         "statistics": optimized_stats,
         "columns": optimized_columns,
         "structure": optimized_struct
+    }
+
+
+def generate_target_llm_optimized_json(
+    target: object
+) -> dict:
+    """
+    Generates a clean representation of a target catalog schema definition
+    for LLM prompt usage.
+    """
+    schema_def = getattr(target, "schema_definition", None) or {}
+    fields = schema_def.get("fields", [])
+    
+    optimized_fields = []
+    for f in fields:
+        opt_f = {
+            "name": f.get("name"),
+            "type": f.get("type"),
+            "primary_key": f.get("primary_key", False),
+            "nullable": f.get("nullable", True),
+            "is_unique": f.get("is_unique", False)
+        }
+        if f.get("description"):
+            opt_f["description"] = f.get("description")
+        if f.get("constraints"):
+            opt_f["constraints"] = f.get("constraints")
+        if f.get("parent"):
+            opt_f["parent"] = f.get("parent")
+        optimized_fields.append(opt_f)
+        
+    return {
+        "target_id": str(getattr(target, "target_id")),
+        "target_name": getattr(target, "target_name"),
+        "target_type": getattr(target, "target_type"),
+        "business_domain": getattr(target, "business_domain"),
+        "description": getattr(target, "description"),
+        "fields": optimized_fields
     }
 
 

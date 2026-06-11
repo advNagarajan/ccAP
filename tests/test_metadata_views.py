@@ -79,10 +79,31 @@ def test_generate_llm_optimized_json():
     assert len(cols) == 2
     assert cols[0]["name"] == "user_id"
     assert cols[0]["is_unique"] is True
-    assert "null_count" not in cols[0]
+    assert "null_count" in cols[0]
     
     assert cols[1]["name"] == "user_email"
     assert cols[1]["min_value"] == "test1@test.com"
+
+
+def test_generate_target_llm_optimized_json():
+    from app.services.metadata_service import generate_target_llm_optimized_json
+    
+    mock_target = MagicMock()
+    mock_target.target_id = uuid.uuid4()
+    mock_target.target_name = "target_users"
+    mock_target.target_type = "POSTGRESQL"
+    mock_target.business_domain = "Customer"
+    mock_target.description = "User records"
+    mock_target.schema_definition = {
+        "fields": [
+            {"name": "id", "type": "INTEGER", "primary_key": True, "nullable": False, "is_unique": True}
+        ]
+    }
+    
+    res = generate_target_llm_optimized_json(mock_target)
+    assert res["target_name"] == "target_users"
+    assert res["fields"][0]["primary_key"] is True
+    assert res["fields"][0]["type"] == "INTEGER"
 
 
 @patch("app.services.metadata_service.MetadataProfile")

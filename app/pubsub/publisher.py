@@ -142,3 +142,28 @@ def publish_metadata_vectorized(
         settings.PUBSUB_TOPIC_METADATA_VECTORIZED,
         payload
     )
+
+
+def publish_target_inferred(
+    job_id,
+    artifact_id,
+    metadata_profile_id,
+    inference_id,
+    target_id,
+    confidence_score,
+    requires_review
+):
+    payload = {
+        "job_id": str(job_id),
+        "artifact_id": str(artifact_id),
+        "metadata_profile_id": str(metadata_profile_id),
+        "inference_id": str(inference_id),
+        "target_id": str(target_id) if target_id else None,
+        "confidence_score": float(confidence_score),
+        "requires_review": bool(requires_review)
+    }
+
+    return publish_event(
+        settings.PUBSUB_TOPIC_TARGET_INFERRED,
+        payload
+    )

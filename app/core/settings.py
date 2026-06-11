@@ -30,8 +30,16 @@ class Settings(BaseSettings):
     PUBSUB_SUBSCRIPTION_METADATA_EXTRACTED: str
     PUBSUB_TOPIC_METADATA_VECTORIZED: str
     PUBSUB_SUBSCRIPTION_METADATA_VECTORIZED: str
+    PUBSUB_TOPIC_TARGET_INFERRED: str
+    PUBSUB_SUBSCRIPTION_TARGET_INFERRED: str
 
     GEMINI_API_KEY: str | None = None
+
+    INFERENCE_CONFIDENCE_THRESHOLD: float = 0.70
+    GCP_LOCATION: str = "us-central1"
+    LLM_PROVIDER: str = "vertex"
+    VERTEX_EMBEDDING_MODEL: str | None = None
+    VERTEX_GENERATIVE_MODEL: str | None = None
 
     model_config = SettingsConfigDict(
         extra="ignore"

@@ -10,7 +10,7 @@ from app.services.passport_service import (
     get_vector_embedding
 )
 
-logger = logging.getLogger("vector_sync")
+logger = logging.getLogger("target_vectorizer")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
 
@@ -19,7 +19,7 @@ async def sync_target_vector_on_mutation(target_id: str, db: Session) -> None:
     Compiles passport text and generates vector embedding for a target catalog item.
     """
     target_uuid = UUID(target_id)
-    logger.info(f"--- Processing Target Mutation vector sync for target_id={target_uuid} ---")
+    logger.info(f"--- Processing Target Mutation vector generation for target_id={target_uuid} ---")
     
     target = db.get(TargetCatalog, target_uuid)
     if target is None:
@@ -44,9 +44,9 @@ async def sync_target_vector_on_mutation(target_id: str, db: Session) -> None:
         target.target_passport_text = passport_text
         target.target_embedding = embedding
         db.commit()
-        logger.info(f"Successfully synchronized target vector for target_id={target_uuid}.")
+        logger.info(f"Successfully generated target vector for target_id={target_uuid}.")
     except Exception as e:
-        logger.error(f"Failed to synchronize target vector for target_id={target_uuid}: {e}", exc_info=True)
+        logger.error(f"Failed to generate target vector for target_id={target_uuid}: {e}", exc_info=True)
         db.rollback()
         raise
 

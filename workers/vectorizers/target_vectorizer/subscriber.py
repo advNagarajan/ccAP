@@ -11,7 +11,7 @@ from workers.vectorizers.target_vectorizer.processor import (
     append_feedback_and_revectorize
 )
 
-logger = logging.getLogger("vector_sync")
+logger = logging.getLogger("target_vectorizer")
 
 
 def callback_mutation(message):
@@ -128,9 +128,9 @@ def start_subscriber():
         # Keep main thread alive while futures run in background threads
         # We can just wait for both results
         # To avoid blocking indefinitely on one, we can run a loop or just wait on one
-        logger.info("Vector Sync Workers started. Listening on subscriptions...")
+        logger.info("Target Vectorizer Workers started. Listening on subscriptions...")
         mutation_future.result()
     except KeyboardInterrupt:
         mutation_future.cancel()
         feedback_future.cancel()
-        logger.info("Vector Sync Workers stopped.")
+        logger.info("Target Vectorizer Workers stopped.")

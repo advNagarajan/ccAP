@@ -128,9 +128,7 @@ with patch("workers.vectorizers.target_vectorizer.processor.get_vector_embedding
     assert mock_target.target_passport_text is not None
     assert "Financial ledger transactions landing zone" in mock_target.target_passport_text
     assert "Tx Id" in mock_target.target_passport_text
-    assert "(unique identifier)" in mock_target.target_passport_text
     assert "Amount" in mock_target.target_passport_text
-    assert "(present in 100% of records)" in mock_target.target_passport_text
     assert mock_target.target_embedding == mock_vector
     print("PASS")
 

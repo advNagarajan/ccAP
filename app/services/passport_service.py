@@ -17,12 +17,40 @@ def generate_target_passport_text(
 ) -> str:
     """
     Compiles a deterministic, embedding-optimized natural language description
-    (passport) for a target catalog row.
+    (passport) for a target catalog row optimized for vector search.
     """
     passport_parts = []
 
-    # 1. Identity Context
-    passport_parts.append(f"Target Database Asset: {target.target_name.replace('_', ' ').title()}")
+    # 1. Semantic Summary
+    target_name_title = target.target_name.replace('_', ' ').title()
+    domain_str = f" in the {target.business_domain} domain" if target.business_domain else ""
+    if target.description:
+        desc_clean = target.description.rstrip('.')
+        # Lowercase the first letter of description if it starts a sentence
+        if len(desc_clean) > 0:
+            desc_clean = desc_clean[0].lower() + desc_clean[1:]
+        summary_line = f"Semantic Summary: Stores {target_name_title} records{domain_str} primarily used for {desc_clean}."
+    else:
+        summary_line = f"Semantic Summary: Stores and manages {target_name_title} database records{domain_str}."
+    passport_parts.append(summary_line)
+
+    # 2. Business Concepts
+    concepts = []
+    if target.business_domain:
+        concepts.append(target.business_domain.lower())
+    concepts.extend(target.target_name.lower().split('_'))
+    if target.description:
+        # Extract keywords longer than 3 characters, stripping punctuation
+        words = [w.strip(".,()\"';:") for w in target.description.lower().split() if len(w) > 3]
+        stopwords = {"used", "from", "with", "that", "this", "were", "been", "have", "metadata", "schema", "table"}
+        for w in words:
+            if w not in concepts and w not in stopwords:
+                concepts.append(w)
+    business_concepts = ", ".join(c.title() for c in concepts[:15])
+    passport_parts.append(f"Business Concepts: {business_concepts}")
+
+    # 3. Identity Context
+    passport_parts.append(f"Target Database Asset: {target_name_title}")
     passport_parts.append(f"Target System Type: {target.target_type}")
     
     if target.business_domain:
@@ -31,7 +59,7 @@ def generate_target_passport_text(
     if target.description:
         passport_parts.append(f"Description: {target.description}")
 
-    # 2. Schema Structure
+    # 4. Schema Fields
     schema_def = target.schema_definition or {}
     fields = []
     if isinstance(schema_def, dict):
@@ -48,17 +76,15 @@ def generate_target_passport_text(
                 elif isinstance(col_type, dict):
                     fields.append({
                         "name": col_name,
-                        "type": col_type.get("type", "UNKNOWN"),
-                        "primary_key": col_type.get("primary_key", False),
-                        "nullable": col_type.get("nullable", True)
+                        "type": col_type.get("type", "UNKNOWN")
                     })
     elif isinstance(schema_def, list):
         fields = schema_def
 
     if fields:
-        passport_parts.append("Structure Schema Fields:")
+        passport_parts.append("Schema Fields:")
         
-        # Grouping by parent/logical structures if available, default to "General"
+        # Grouping by parent/logical structures if available, default to "General Schema Columns"
         grouped_fields = {}
         for f in fields:
             if not isinstance(f, dict):
@@ -72,27 +98,18 @@ def generate_target_passport_text(
             for col in col_list:
                 col_name = col.get("name", "").replace("_", " ").title()
                 col_type = col.get("type", "UNKNOWN")
-                
-                tags = []
-                # Check for primary key / unique tags
-                if col.get("primary_key") or col.get("is_unique") or "unique" in str(col.get("constraints", "")).lower():
-                    tags.append("(unique identifier)")
-                
-                # Check for non-nullable/required tags
-                if col.get("nullable") is False or col.get("required") is True or "not null" in str(col.get("constraints", "")).lower():
-                    tags.append("(present in 100% of records)")
+                # Strip parenthetical precision/scale details (e.g., VARCHAR(255) -> VARCHAR)
+                base_type = col_type.split("(")[0].strip().upper()
+                passport_parts.append(f"    - Field: {col_name} ({base_type})")
 
-                tag_suffix = " " + " ".join(tags) if tags else ""
-                passport_parts.append(f"    - Column Name: {col_name}, Data Type: {col_type}{tag_suffix}")
-
-    # 3. Connection context (stripping credential syntax noise)
+    # 5. Connection context (stripping credential syntax noise)
     conn_details = target.connection_details or {}
     conn_keys = [k for k in conn_details.keys() if "password" not in k.lower() and "secret" not in k.lower() and "key" not in k.lower()]
     if conn_keys:
         conn_info = ", ".join(f"{k.replace('_', ' ').title()}: {conn_details[k]}" for k in conn_keys)
         passport_parts.append(f"Connection Information: {conn_info}")
 
-    # 4. Human Engineering Feedback Logs
+    # 6. Human Engineering Feedback Logs
     if feedback_logs:
         passport_parts.append("Historical Human Engineering Feedback Guidelines:")
         for log in feedback_logs:

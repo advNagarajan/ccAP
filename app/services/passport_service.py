@@ -33,7 +33,27 @@ def generate_target_passport_text(
 
     # 2. Schema Structure
     schema_def = target.schema_definition or {}
-    fields = schema_def.get("fields", [])
+    fields = []
+    if isinstance(schema_def, dict):
+        if "fields" in schema_def and isinstance(schema_def["fields"], list):
+            fields = schema_def["fields"]
+        else:
+            # Handle key-value columns structure
+            for col_name, col_type in schema_def.items():
+                if isinstance(col_type, str):
+                    fields.append({
+                        "name": col_name,
+                        "type": col_type
+                    })
+                elif isinstance(col_type, dict):
+                    fields.append({
+                        "name": col_name,
+                        "type": col_type.get("type", "UNKNOWN"),
+                        "primary_key": col_type.get("primary_key", False),
+                        "nullable": col_type.get("nullable", True)
+                    })
+    elif isinstance(schema_def, list):
+        fields = schema_def
 
     if fields:
         passport_parts.append("Structure Schema Fields:")
@@ -41,6 +61,8 @@ def generate_target_passport_text(
         # Grouping by parent/logical structures if available, default to "General"
         grouped_fields = {}
         for f in fields:
+            if not isinstance(f, dict):
+                continue
             parent = f.get("parent") or "General Schema Columns"
             parent_title = parent.replace("_", " ").title()
             grouped_fields.setdefault(parent_title, []).append(f)
@@ -85,30 +107,13 @@ def generate_target_passport_text(
 
 async def get_vector_embedding(text: str) -> List[float]:
     """
-    Retrieves dense vector representation from Google GenAI embedding model (text-embedding-004).
+    Retrieves dense vector representation from the configured embedding provider.
     """
-    api_key = settings.GEMINI_API_KEY
-    if not api_key:
-        logger.warning("No GEMINI_API_KEY found in settings. Falling back to mock vector.")
-        # Return a deterministic mock vector of 768 dimensions for testing/fallback
-        return [0.0] * 768
+    from app.services.llm import get_embedding_provider
 
     try:
-        # Initialize the GenAI Client with settings API key
-        client = genai.Client(api_key=api_key)
-        
-        # Execute the call in an executor to keep it async friendly
-        response = await asyncio.to_thread(
-            client.models.embed_content,
-            model="text-embedding-004",
-            contents=text
-        )
-        
-        if not response or not response.embeddings:
-            raise ValueError("No embeddings returned from Gemini API.")
-            
-        return response.embeddings[0].values
+        provider = get_embedding_provider()
+        return await provider.get_embedding(text)
     except Exception as e:
-        logger.error(f"Error fetching vector embedding from Gemini API: {e}")
-        # Return fallback or reraise
+        logger.error(f"Error fetching vector embedding: {e}")
         raise

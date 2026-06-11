@@ -1,6 +1,7 @@
 import json
 import asyncio
 import logging
+from uuid import UUID
 from google.cloud import pubsub_v1
 
 from app.core.settings import settings
@@ -14,10 +15,24 @@ logger = logging.getLogger("vector_sync")
 
 
 def callback_mutation(message):
+    raw_data = ""
     try:
         logger.info(f"Received mutation message: {message.message_id}")
-        payload = json.loads(message.data.decode("utf-8"))
+        raw_data = message.data.decode("utf-8")
+        payload = json.loads(raw_data)
+        
+        if not isinstance(payload, dict) or "target_id" not in payload:
+            logger.warning(f"Message {message.message_id} is missing target_id or is not a JSON object. Discarding.")
+            message.ack()
+            return
+
         target_id = payload["target_id"]
+        try:
+            UUID(str(target_id))
+        except ValueError:
+            logger.warning(f"Message {message.message_id} has badly formed UUID '{target_id}'. Discarding.")
+            message.ack()
+            return
 
         db = SessionLocal()
         try:
@@ -28,19 +43,38 @@ def callback_mutation(message):
         finally:
             db.close()
 
+    except json.JSONDecodeError:
+        logger.warning(f"Message {message.message_id} payload is not valid JSON. Discarding.")
+        message.ack()
     except Exception as e:
         logger.error(f"Failed to process mutation message: {e}")
         message.nack()
 
 
 def callback_feedback(message):
+    raw_data = ""
     try:
         logger.info(f"Received feedback message: {message.message_id}")
-        payload = json.loads(message.data.decode("utf-8"))
+        raw_data = message.data.decode("utf-8")
+        payload = json.loads(raw_data)
+        
+        if not isinstance(payload, dict) or "job_id" not in payload or "target_id" not in payload or "user_action" not in payload:
+            logger.warning(f"Message {message.message_id} is missing required fields. Discarding.")
+            message.ack()
+            return
+
         job_id = payload["job_id"]
         target_id = payload["target_id"]
         user_action = payload["user_action"]
         notes = payload.get("notes") or ""
+
+        try:
+            UUID(str(job_id))
+            UUID(str(target_id))
+        except ValueError:
+            logger.warning(f"Message {message.message_id} has badly formed UUIDs. Discarding.")
+            message.ack()
+            return
 
         db = SessionLocal()
         try:
@@ -58,6 +92,9 @@ def callback_feedback(message):
         finally:
             db.close()
 
+    except json.JSONDecodeError:
+        logger.warning(f"Message {message.message_id} payload is not valid JSON. Discarding.")
+        message.ack()
     except Exception as e:
         logger.error(f"Failed to process feedback message: {e}")
         message.nack()

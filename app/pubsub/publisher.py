@@ -167,3 +167,24 @@ def publish_target_inferred(
         settings.PUBSUB_TOPIC_TARGET_INFERRED,
         payload
     )
+
+
+def publish_schema_validated(
+    job_id,
+    artifact_id,
+    inference_id,
+    validation_id,
+    validation_status
+):
+    payload = {
+        "job_id": str(job_id),
+        "artifact_id": str(artifact_id),
+        "inference_id": str(inference_id),
+        "validation_id": str(validation_id),
+        "validation_status": str(validation_status)
+    }
+
+    return publish_event(
+        settings.PUBSUB_TOPIC_SCHEMA_VALIDATED,
+        payload
+    )

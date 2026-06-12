@@ -6,3 +6,4 @@ from app.models.artifact_record import ArtifactRecord
 from app.models.target_catalog import TargetCatalog
 from app.models.llm_feedback_loop import LlmFeedbackLoop
 from app.models.landing_inference import LandingInference
+from app.models.schema_validation import SchemaValidation

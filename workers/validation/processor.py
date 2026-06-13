@@ -6,6 +6,8 @@ from app.models.metadata_profile import MetadataProfile
 from app.models.target_catalog import TargetCatalog
 from app.models.landing_inference import LandingInference
 from app.models.schema_validation import SchemaValidation
+from app.models.schema_fallback_request import SchemaFallbackRequest
+from app.models.job import Job
 from app.services.job_stage_service import start_stage, complete_stage, fail_stage
 from app.pubsub.publisher import publish_schema_validated
 from app.services.validation_service import compute_schema_validation
@@ -24,6 +26,7 @@ def process_schema_validation(
     """
     Synchronous orchestrator that handles DB updates, audit stages, event publishing,
     and delegates core logic to validation_service.
+    Creates a SchemaFallbackRequest if validation is skipped (target not found) or failed.
     """
     job_uuid = UUID(job_id)
     inference_uuid = UUID(inference_id)
@@ -41,7 +44,7 @@ def process_schema_validation(
         if profile is None:
             raise ValueError(f"MetadataProfile not found: {metadata_profile_id}")
 
-        # Handle skipped validation
+        # Handle skipped validation (TARGET_NOT_FOUND)
         if not inference.target_id:
             logger.info(f"Validation SKIPPED for job_id={job_id} (no target mapped).")
             val_record = SchemaValidation(
@@ -68,6 +71,23 @@ def process_schema_validation(
             db.add(val_record)
             db.commit()
             db.refresh(val_record)
+
+            # Create fallback request
+            fallback_req = SchemaFallbackRequest(
+                job_id=job_uuid,
+                artifact_id=UUID(artifact_id),
+                validation_id=val_record.validation_id,
+                request_reason="TARGET_NOT_FOUND",
+                request_status="PENDING"
+            )
+            db.add(fallback_req)
+
+            # Update parent job status to PENDING_REVIEW
+            job = db.get(Job, job_uuid)
+            if job:
+                job.status = "PENDING_REVIEW"
+
+            db.commit()
 
             complete_stage(
                 stage.stage_history_id,
@@ -119,6 +139,23 @@ def process_schema_validation(
         db.add(val_record)
         db.commit()
         db.refresh(val_record)
+
+        # Handle failed validation (VALIDATION_FAILED)
+        if val_record.validation_status == "FAILED":
+            fallback_req = SchemaFallbackRequest(
+                job_id=job_uuid,
+                artifact_id=UUID(artifact_id),
+                validation_id=val_record.validation_id,
+                request_reason="VALIDATION_FAILED",
+                request_status="PENDING"
+            )
+            db.add(fallback_req)
+
+            job = db.get(Job, job_uuid)
+            if job:
+                job.status = "PENDING_REVIEW"
+
+            db.commit()
 
         # Log compact audit stage
         issue_count = len(results["report_json"]["invalid_mappings"]) + len(results["report_json"]["datatype_issues"])

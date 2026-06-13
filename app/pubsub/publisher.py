@@ -188,3 +188,41 @@ def publish_schema_validated(
         settings.PUBSUB_TOPIC_SCHEMA_VALIDATED,
         payload
     )
+
+
+def publish_schema_drifted(
+    job_id,
+    artifact_id,
+    drift_id,
+    drift_status,
+    drift_score
+):
+    payload = {
+        "job_id": str(job_id),
+        "artifact_id": str(artifact_id),
+        "drift_id": str(drift_id),
+        "drift_status": str(drift_status),
+        "drift_score": float(drift_score)
+    }
+
+    return publish_event(
+        settings.PUBSUB_TOPIC_SCHEMA_DRIFTED,
+        payload
+    )
+
+
+def publish_fallback_landing_created(
+    job_id,
+    source_id,
+    backup_table_name
+):
+    payload = {
+        "job_id": str(job_id),
+        "source_id": str(source_id),
+        "backup_table_name": str(backup_table_name)
+    }
+
+    return publish_event(
+        settings.PUBSUB_TOPIC_FALLBACK_LANDING_CREATED,
+        payload
+    )

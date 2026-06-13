@@ -43,6 +43,14 @@ class InferenceResponseSchema(BaseModel):
         default_factory=list,
         description="List of target column names that are missing from the source dataset schema."
     )
+    partitioning_recommendation: str | None = Field(
+        default=None,
+        description="Recommended column and strategy for partitioning the target table (e.g. partition by transaction_date MONTHLY), or null if not applicable."
+    )
+    naming_convention_suggestions: dict[str, str] | None = Field(
+        default=None,
+        description="Suggestions for renaming source columns to follow target naming conventions (e.g., lowercase snake_case for PostgreSQL)."
+    )
 
 
 async def infer_target_landing_zone(
@@ -133,7 +141,11 @@ async def infer_target_landing_zone(
             "5. No-Match Handling:\n"
             "   - If no candidate is sufficiently compatible, return selected_target_id = null, column_mapping = null, and explain why in reasoning.\n"
             "   - The confidence_score should reflect your actual certainty in this assessment.\n\n"
-            "6. Your response MUST be valid JSON adhering exactly to the schema."
+            "6. Partitioning Recommendations:\n"
+            "   - Analyze the source columns (e.g. timestamps, transaction dates, high-cardinality category IDs) and suggest a partition key and strategy (e.g. Partition monthly on transaction_date), or null if not applicable.\n\n"
+            "7. Naming Convention suggestions:\n"
+            "   - Reconcile source column names with standard target casing conventions (e.g. converting CamelCase/PascalCase to snake_case for PostgreSQL targets, stripping spaces/special characters, and escaping SQL keywords). Map raw source name -> suggested name.\n\n"
+            "8. Your response MUST be valid JSON adhering exactly to the schema."
         )
 
         # 4. Invoke LLM Provider
@@ -154,6 +166,8 @@ async def infer_target_landing_zone(
         column_mapping = res_json.get("column_mapping")
         unmapped_source = res_json.get("unmapped_source_columns", [])
         missing_target = res_json.get("missing_target_columns", [])
+        partitioning_rec = res_json.get("partitioning_recommendation")
+        naming_suggestions = res_json.get("naming_convention_suggestions")
         
         requires_review = confidence < settings.INFERENCE_CONFIDENCE_THRESHOLD
         
@@ -169,6 +183,8 @@ async def infer_target_landing_zone(
             column_mapping=column_mapping,
             unmapped_source_columns=unmapped_source,
             missing_target_columns=missing_target,
+            partitioning_recommendation=partitioning_rec,
+            naming_convention_suggestions=naming_suggestions,
             reasoning=reasoning,
             requires_review=requires_review
         )

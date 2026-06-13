@@ -62,6 +62,16 @@ class LandingInference(Base):
         nullable=True
     )
 
+    partitioning_recommendation: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True
+    )
+
+    naming_convention_suggestions: Mapped[dict | None] = mapped_column(
+        JSONB,
+        nullable=True
+    )
+
     reasoning: Mapped[str] = mapped_column(
         Text,
         nullable=False

@@ -7,3 +7,5 @@ from app.models.target_catalog import TargetCatalog
 from app.models.llm_feedback_loop import LlmFeedbackLoop
 from app.models.landing_inference import LandingInference
 from app.models.schema_validation import SchemaValidation
+from app.models.schema_drift import SchemaDrift
+from app.models.schema_fallback_request import SchemaFallbackRequest

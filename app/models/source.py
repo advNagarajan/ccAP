@@ -1,3 +1,7 @@
+"""
+An SQLAlchemy DB Model (system.sources).
+Used to define integration endpoints (like an S3 bucket or Snowflake instance).
+"""
 from datetime import datetime
 
 from sqlalchemy import (

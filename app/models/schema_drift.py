@@ -1,3 +1,7 @@
+"""
+An SQLAlchemy DB Model (metadata.schema_drift).
+Used by the Validation worker to log anomalies against a target schema.
+"""
 import uuid
 from datetime import datetime
 

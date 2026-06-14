@@ -1,3 +1,7 @@
+"""
+An SQLAlchemy DB Model (system.processing_configurations).
+Used to store connector credentials and settings.
+"""
 from datetime import datetime
 from uuid import UUID as UUIDType
 

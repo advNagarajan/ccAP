@@ -39,8 +39,6 @@ class Settings(BaseSettings):
     PUBSUB_SUBSCRIPTION_TARGET_MUTATED: str
     PUBSUB_SUBSCRIPTION_FEEDBACK_SUBMITTED: str
 
-    GEMINI_API_KEY: str | None = None
-
     # Thresholds
     INFERENCE_CONFIDENCE_THRESHOLD: float = 0.70
     VALIDATION_WARNING_THRESHOLD: float = 1.0

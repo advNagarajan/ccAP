@@ -1,3 +1,7 @@
+"""
+An SQLAlchemy DB Model (metadata.schema_validations).
+Used by the Validation worker to store the overall health score of an inference mapping.
+"""
 import uuid
 from datetime import datetime
 

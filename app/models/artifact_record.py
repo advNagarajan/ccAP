@@ -1,3 +1,7 @@
+"""
+An SQLAlchemy DB Model (system.artifact_records).
+Used by the pipeline to track files that have been processed to prevent duplication.
+"""
 from datetime import datetime
 
 from sqlalchemy import (

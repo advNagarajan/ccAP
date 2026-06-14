@@ -1,3 +1,7 @@
+"""
+An SQLAlchemy DB Model (metadata.target_catalog).
+Used by Vectorizers and Inference as the definitive registry of destination tables.
+"""
 from datetime import datetime
 
 from sqlalchemy import (

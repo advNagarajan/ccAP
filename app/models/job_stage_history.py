@@ -1,3 +1,7 @@
+"""
+An SQLAlchemy DB Model (system.job_stage_history).
+Used by workers via job_stage_service to log granular step-by-step progress.
+"""
 import uuid
 
 from sqlalchemy import DateTime

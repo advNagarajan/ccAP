@@ -1,3 +1,7 @@
+"""
+An SQLAlchemy DB Model (metadata.landing_inferences).
+Used by the Inference worker to store LLM target selection results.
+"""
 import uuid
 from datetime import datetime
 

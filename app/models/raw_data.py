@@ -1,3 +1,7 @@
+"""
+A pure Python dataclass.
+Used to pass raw byte strings from Connectors to Parsers.
+"""
 from dataclasses import dataclass
 
 

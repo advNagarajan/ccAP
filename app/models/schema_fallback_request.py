@@ -1,3 +1,7 @@
+"""
+An SQLAlchemy DB Model (metadata.schema_fallback_requests).
+Used when a target schema cannot be inferred.
+"""
 import uuid
 from datetime import datetime
 

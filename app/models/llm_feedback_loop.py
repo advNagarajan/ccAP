@@ -1,3 +1,7 @@
+"""
+An SQLAlchemy DB Model (metadata.llm_feedback_loop).
+Used by the Target Vectorizer to learn from human engineer overrides.
+"""
 from datetime import datetime
 
 from sqlalchemy import (

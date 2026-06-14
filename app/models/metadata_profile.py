@@ -1,3 +1,7 @@
+"""
+An SQLAlchemy DB Model (metadata.metadata_profiles).
+Used by the Metadata worker to persist dataset statistics and vector embeddings.
+"""
 from datetime import datetime
 from uuid import uuid4
 

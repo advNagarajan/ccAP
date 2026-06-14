@@ -1,3 +1,7 @@
+"""
+Pure Python dataclasses.
+Used by metadata_service to hold statistical profiles of extracted data.
+"""
 from dataclasses import dataclass, field
 
 

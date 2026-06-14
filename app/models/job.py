@@ -1,3 +1,7 @@
+"""
+An SQLAlchemy DB Model (system.jobs).
+Used by all workers to track the high-level status of an ingestion run.
+"""
 from datetime import datetime
 
 from sqlalchemy import (

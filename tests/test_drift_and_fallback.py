@@ -151,7 +151,7 @@ def test_validation_skipped_creates_fallback_request(mock_publish, mock_complete
 
 @patch("workers.drift.processor.start_stage")
 @patch("workers.drift.processor.complete_stage")
-@patch("workers.drift.processor.publish_schema_drifted")
+@patch("workers.drift.processor.publish_drift_detected")
 def test_critical_drift_creates_fallback_request(mock_publish, mock_complete, mock_start):
     db = MagicMock()
     job_id = str(uuid.uuid4())

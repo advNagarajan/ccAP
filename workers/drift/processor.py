@@ -10,7 +10,7 @@ from app.models.schema_drift import SchemaDrift
 from app.models.schema_fallback_request import SchemaFallbackRequest
 from app.models.job import Job
 from app.services.job_stage_service import start_stage, complete_stage, fail_stage
-from app.pubsub.publisher import publish_schema_drifted
+from app.pubsub.publisher import publish_drift_detected
 from app.services.drift_service import compute_schema_drift
 from app.core.settings import settings
 
@@ -81,7 +81,7 @@ def process_schema_drift(
                     "drift_score": 0.0
                 }
             )
-            publish_schema_drifted(
+            publish_drift_detected(
                 job_id=job_id,
                 artifact_id=artifact_id,
                 drift_id=str(drift_record.drift_id),
@@ -160,7 +160,7 @@ def process_schema_drift(
         )
 
         # Publish drift event
-        publish_schema_drifted(
+        publish_drift_detected(
             job_id=job_id,
             artifact_id=artifact_id,
             drift_id=str(drift_record.drift_id),

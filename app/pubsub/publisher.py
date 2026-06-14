@@ -190,7 +190,7 @@ def publish_schema_validated(
     )
 
 
-def publish_schema_drifted(
+def publish_drift_detected(
     job_id,
     artifact_id,
     drift_id,
@@ -206,7 +206,7 @@ def publish_schema_drifted(
     }
 
     return publish_event(
-        settings.PUBSUB_TOPIC_SCHEMA_DRIFTED,
+        settings.PUBSUB_TOPIC_DRIFT_DETECTED,
         payload
     )
 

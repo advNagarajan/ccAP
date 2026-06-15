@@ -3,8 +3,8 @@ from datetime import datetime, UTC
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.artifact import Artifact
-from app.models.artifact_record import ArtifactRecord
+from app.models.domain.artifact import Artifact
+from app.models.db.artifact_record import ArtifactRecord
 
 
 def get_unprocessed_artifacts(

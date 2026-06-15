@@ -4,8 +4,8 @@ from uuid import UUID
 
 from app.db.database import SessionLocal
 
-from app.models.job import Job
-from app.models.source import Source
+from app.models.db.job import Job
+from app.models.db.source import Source
 
 from app.constants.job_status import JobStatus
 

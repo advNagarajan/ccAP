@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
-from app.models.dataset import Dataset
-from app.models.raw_data import RawData
+from app.models.domain.dataset import Dataset
+from app.models.domain.raw_data import RawData
 
 
 class BaseParser(ABC):

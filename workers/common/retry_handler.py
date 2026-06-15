@@ -4,7 +4,7 @@ import time
 import socket
 import json
 from sqlalchemy.orm import Session
-from app.models.job import Job
+from app.models.db.job import Job
 from app.constants.job_status import JobStatus
 from app.pubsub.publisher import publish_job_failed, publish_event
 from app.core.settings import settings

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
-from app.models.artifact import Artifact
-from app.models.raw_data import RawData
+from app.models.domain.artifact import Artifact
+from app.models.domain.raw_data import RawData
 
 
 class BaseConnector(ABC):

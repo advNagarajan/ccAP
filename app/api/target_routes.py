@@ -10,8 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models.target_catalog import TargetCatalog
-from app.models.llm_feedback_loop import LlmFeedbackLoop
+from app.models.db.target_catalog import TargetCatalog
+from app.models.db.llm_feedback_loop import LlmFeedbackLoop
 from app.schemas.target import (
     TargetCatalogCreate,
     TargetCatalogCreateResponse,

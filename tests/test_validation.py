@@ -2,11 +2,11 @@ import uuid
 import pytest
 from unittest.mock import MagicMock, patch
 
-from app.models.metadata_profile import MetadataProfile
-from app.models.target_catalog import TargetCatalog
-from app.models.landing_inference import LandingInference
-from app.models.schema_validation import SchemaValidation
-from app.models.job import Job
+from app.models.db.metadata_profile import MetadataProfile
+from app.models.db.target_catalog import TargetCatalog
+from app.models.db.landing_inference import LandingInference
+from app.models.db.schema_validation import SchemaValidation
+from app.models.db.job import Job
 from workers.validation.processor import process_schema_validation
 
 def test_validation_passed():

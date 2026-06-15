@@ -3,7 +3,7 @@ import pytest
 from datetime import datetime
 from unittest.mock import MagicMock, AsyncMock, patch
 
-from app.models.metadata_profile import MetadataProfile
+from app.models.db.metadata_profile import MetadataProfile
 from app.services.metadata_service import (
     generate_embedding_optimized_text,
     generate_llm_optimized_json,
@@ -106,9 +106,10 @@ def test_generate_target_llm_optimized_json():
     assert res["fields"][0]["type"] == "INTEGER"
 
 
-@patch("app.services.metadata_service.MetadataProfile")
-def test_save_metadata(mock_metadata_profile_cls):
+def test_save_metadata():
     mock_db = MagicMock()
+    # Mock database query to return None so that a new profile is created and added
+    mock_db.execute.return_value.scalar_one_or_none.return_value = None
     job_id = uuid.uuid4()
     artifact_id = uuid.uuid4()
     

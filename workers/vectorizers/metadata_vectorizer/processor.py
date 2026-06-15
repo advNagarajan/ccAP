@@ -2,7 +2,7 @@ import logging
 from uuid import UUID
 from sqlalchemy.orm import Session
 
-from app.models.metadata_profile import MetadataProfile
+from app.models.db.metadata_profile import MetadataProfile
 from app.services.passport_service import get_vector_embedding
 from app.services.metadata_service import generate_embedding_optimized_text
 from app.pubsub.publisher import publish_metadata_vectorized

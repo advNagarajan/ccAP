@@ -4,8 +4,8 @@ import logging
 from typing import List, Optional
 from google import genai
 
-from app.models.target_catalog import TargetCatalog
-from app.models.llm_feedback_loop import LlmFeedbackLoop
+from app.models.db.target_catalog import TargetCatalog
+from app.models.db.llm_feedback_loop import LlmFeedbackLoop
 from app.core.settings import settings
 
 logger = logging.getLogger("vector_sync")

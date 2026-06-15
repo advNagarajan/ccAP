@@ -6,8 +6,8 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.db.session import get_db
-from app.models.target_catalog import TargetCatalog
-from app.models.llm_feedback_loop import LlmFeedbackLoop
+from app.models.db.target_catalog import TargetCatalog
+from app.models.db.llm_feedback_loop import LlmFeedbackLoop
 from workers.vectorizers.target_vectorizer.processor import (
     sync_target_vector_on_mutation,
     append_feedback_and_revectorize

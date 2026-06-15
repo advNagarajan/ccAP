@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from typing import List as ListType
 
 from app.db.session import get_db
-from app.models.schema_fallback_request import SchemaFallbackRequest
+from app.models.db.schema_fallback_request import SchemaFallbackRequest
 from app.schemas.fallback import FallbackApproveRequest, FallbackRejectRequest, FallbackResponse
 from app.services.backup_table_service import create_backup_table_for_request, reject_fallback_request
 

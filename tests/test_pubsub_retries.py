@@ -8,7 +8,7 @@ from google.api_core import exceptions as google_exceptions
 from sqlalchemy import exc as sa_exceptions
 
 from app.constants.job_status import JobStatus
-from app.models.job import Job
+from app.models.db.job import Job
 from workers.common.retry_handler import (
     is_transient_error,
     is_network_infra_error,

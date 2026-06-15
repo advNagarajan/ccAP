@@ -4,9 +4,9 @@ from statistics import mean, median
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.dataset import Dataset
+from app.models.domain.dataset import Dataset
 
-from app.models.metadata import (
+from app.models.domain.metadata import (
     ColumnMetadata,
     DatasetMetadata,
     DatasetStatistics,
@@ -14,7 +14,7 @@ from app.models.metadata import (
     NumericStatistics
 )
 
-from app.models.metadata_profile import MetadataProfile
+from app.models.db.metadata_profile import MetadataProfile
 
 
 def _walk_structure(

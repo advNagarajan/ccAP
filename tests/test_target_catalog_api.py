@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.db.session import get_db
-from app.models.target_catalog import TargetCatalog
+from app.models.db.target_catalog import TargetCatalog
 
 # Create mock DB session
 mock_db = MagicMock()

@@ -3,7 +3,7 @@ from datetime import datetime, UTC
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.job_stage_history import JobStageHistory
+from app.models.db.job_stage_history import JobStageHistory
 
 
 def start_stage(job_id, stage_name, db: Session, details=None):

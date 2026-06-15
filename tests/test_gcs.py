@@ -2,8 +2,8 @@ from pprint import pprint
 
 from app.db.database import SessionLocal
 
-from app.models.source import Source
-from app.models.artifact_record import ArtifactRecord
+from app.models.db.source import Source
+from app.models.db.artifact_record import ArtifactRecord
 
 from app.connectors.registry import CONNECTORS
 from app.parsers.registry import PARSERS
@@ -99,7 +99,7 @@ def test_gcs_ingestion_pipeline():
                 f"{artifact.artifact_name}"
             )
 
-            raw_data = connector.extract(
+            raw_data = connector.extract_sample(
                 source,
                 artifact
             )

@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 
-from app.models.processing_configuration import ProcessingConfiguration
+from app.models.db.processing_configuration import ProcessingConfiguration
 
 from app.schemas.configuration import (
     ConfigurationCreateResponse,

@@ -4,10 +4,10 @@ from uuid import UUID
 from sqlalchemy import text, select
 from sqlalchemy.orm import Session
 
-from app.models.schema_fallback_request import SchemaFallbackRequest
-from app.models.job import Job
-from app.models.job_stage_history import JobStageHistory
-from app.models.metadata_profile import MetadataProfile
+from app.models.db.schema_fallback_request import SchemaFallbackRequest
+from app.models.db.job import Job
+from app.models.db.job_stage_history import JobStageHistory
+from app.models.db.metadata_profile import MetadataProfile
 from app.pubsub.publisher import publish_fallback_landing_created
 
 logger = logging.getLogger("backup_table_service")

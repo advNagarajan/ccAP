@@ -1,7 +1,7 @@
 from sqlalchemy import select
 
 from app.db.database import SessionLocal
-from app.models.source import Source
+from app.models.db.source import Source
 
 db = SessionLocal()
 

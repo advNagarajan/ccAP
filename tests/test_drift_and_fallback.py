@@ -6,14 +6,14 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.db.session import get_db
-from app.models.metadata_profile import MetadataProfile
-from app.models.target_catalog import TargetCatalog
-from app.models.landing_inference import LandingInference
-from app.models.schema_validation import SchemaValidation
-from app.models.schema_drift import SchemaDrift
-from app.models.schema_fallback_request import SchemaFallbackRequest
-from app.models.job import Job
-from app.models.job_stage_history import JobStageHistory
+from app.models.db.metadata_profile import MetadataProfile
+from app.models.db.target_catalog import TargetCatalog
+from app.models.db.landing_inference import LandingInference
+from app.models.db.schema_validation import SchemaValidation
+from app.models.db.schema_drift import SchemaDrift
+from app.models.db.schema_fallback_request import SchemaFallbackRequest
+from app.models.db.job import Job
+from app.models.db.job_stage_history import JobStageHistory
 from app.services.drift_service import compute_schema_drift
 from app.services.backup_table_service import create_backup_table_for_request, reject_fallback_request
 from workers.drift.processor import process_schema_drift

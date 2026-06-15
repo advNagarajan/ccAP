@@ -3,8 +3,8 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.target_catalog import TargetCatalog
-from app.models.llm_feedback_loop import LlmFeedbackLoop
+from app.models.db.target_catalog import TargetCatalog
+from app.models.db.llm_feedback_loop import LlmFeedbackLoop
 from app.services.passport_service import (
     generate_target_passport_text,
     get_vector_embedding

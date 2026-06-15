@@ -6,10 +6,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.settings import settings
-from app.models.metadata_profile import MetadataProfile
-from app.models.target_catalog import TargetCatalog
-from app.models.landing_inference import LandingInference
-from app.models.inference_schema import InferenceResponseSchema
+from app.models.db.metadata_profile import MetadataProfile
+from app.models.db.target_catalog import TargetCatalog
+from app.models.db.landing_inference import LandingInference
+from app.models.domain.inference_schema import InferenceResponseSchema
 from app.services.metadata_service import (
     generate_llm_optimized_json,
     generate_target_llm_optimized_json

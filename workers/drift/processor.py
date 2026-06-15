@@ -2,13 +2,13 @@ import logging
 from uuid import UUID
 from sqlalchemy.orm import Session
 
-from app.models.metadata_profile import MetadataProfile
-from app.models.target_catalog import TargetCatalog
-from app.models.landing_inference import LandingInference
-from app.models.schema_validation import SchemaValidation
-from app.models.schema_drift import SchemaDrift
-from app.models.schema_fallback_request import SchemaFallbackRequest
-from app.models.job import Job
+from app.models.db.metadata_profile import MetadataProfile
+from app.models.db.target_catalog import TargetCatalog
+from app.models.db.landing_inference import LandingInference
+from app.models.db.schema_validation import SchemaValidation
+from app.models.db.schema_drift import SchemaDrift
+from app.models.db.schema_fallback_request import SchemaFallbackRequest
+from app.models.db.job import Job
 from app.services.job_stage_service import start_stage, complete_stage, fail_stage
 from app.pubsub.publisher import publish_drift_detected
 from app.services.drift_service import compute_schema_drift

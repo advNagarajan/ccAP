@@ -68,7 +68,28 @@ def compute_schema_validation(
     invalid_mappings = []
     datatype_issues = []
 
+    # Sanitize column mapping: if target column doesn't exist, demote to unmapped
+    sanitized_mapping = {}
+    sanitized_unmapped = list(unmapped_source_columns)
+    
     for src_col, tgt_col in column_mapping.items():
+        if tgt_col is not None:
+            if tgt_col in target_field_names:
+                sanitized_mapping[src_col] = tgt_col
+            else:
+                sanitized_mapping[src_col] = None
+                if src_col not in sanitized_unmapped:
+                    sanitized_unmapped.append(src_col)
+                invalid_mappings.append({
+                    "source_column": src_col,
+                    "target_column": tgt_col,
+                    "severity": "WARNING",
+                    "reason": f"Mapping references a target column '{tgt_col}' that does not exist in the target table schema. Demoted to unmapped."
+                })
+        else:
+            sanitized_mapping[src_col] = None
+
+    for src_col, tgt_col in sanitized_mapping.items():
         if tgt_col is None:
             continue
 
@@ -81,13 +102,6 @@ def compute_schema_validation(
                 "target_column": tgt_col,
                 "severity": "ERROR",
                 "reason": "Mapping references a source column that does not exist in the source dataset schema."
-            })
-        if not tgt_exists:
-            invalid_mappings.append({
-                "source_column": src_col,
-                "target_column": tgt_col,
-                "severity": "ERROR",
-                "reason": "Mapping references a target column that does not exist in the target table schema."
             })
 
         if src_exists and tgt_exists:
@@ -133,15 +147,16 @@ def compute_schema_validation(
     source_column_count = len(source_col_names)
     target_column_count = len(target_field_names)
 
-    mapped_source_columns = {s for s, t in column_mapping.items() if t is not None and s in source_col_names and t in target_field_names}
-    mapped_target_columns = {t for s, t in column_mapping.items() if t is not None and s in source_col_names and t in target_field_names}
+    mapped_source_columns = {s for s, t in sanitized_mapping.items() if t is not None and s in source_col_names and t in target_field_names}
+    mapped_target_columns = {t for s, t in sanitized_mapping.items() if t is not None and s in source_col_names and t in target_field_names}
     mapped_column_count = len(mapped_source_columns)
 
     coverage_percentage = (mapped_column_count / source_column_count * 100.0) if source_column_count > 0 else 0.0
     target_match_percentage = (len(mapped_target_columns) / target_column_count * 100.0) if target_column_count > 0 else 0.0
 
     # Determine status
-    if len(invalid_mappings) > 0:
+    has_errors = any(item["severity"] == "ERROR" for item in invalid_mappings)
+    if has_errors:
         status = "FAILED"
     elif len(datatype_issues) > 0:
         status = "WARNING"
@@ -155,7 +170,7 @@ def compute_schema_validation(
         "invalid_mappings": invalid_mappings,
         "datatype_issues": datatype_issues,
         "missing_target_columns": missing_target_columns,
-        "additional_source_columns": unmapped_source_columns,
+        "additional_source_columns": sanitized_unmapped,
         "coverage_percentage": float(round(coverage_percentage, 2)),
         "target_match_percentage": float(round(target_match_percentage, 2))
     }

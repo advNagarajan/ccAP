@@ -70,8 +70,19 @@ def compute_schema_drift(
     # New: source columns not in target
     # Removed: target columns not in source
 
-    # Let's count renamed columns
+    # Sanitize column mapping: if target column doesn't exist, demote to unmapped
+    sanitized_mapping = {}
     for src_col, tgt_col in column_mapping.items():
+        if tgt_col is not None:
+            if tgt_col in target_field_names:
+                sanitized_mapping[src_col] = tgt_col
+            else:
+                sanitized_mapping[src_col] = None
+        else:
+            sanitized_mapping[src_col] = None
+
+    # Let's count renamed columns
+    for src_col, tgt_col in sanitized_mapping.items():
         if tgt_col:
             # Check renaming
             if src_col != tgt_col:
@@ -114,7 +125,7 @@ def compute_schema_drift(
     # Added columns: Columns in source that are not present in target catalog schema at all
     for src_col in source_col_names:
         # Check if mapped to anything in target, or if exists in target fields
-        mapped_target = column_mapping.get(src_col)
+        mapped_target = sanitized_mapping.get(src_col)
         if mapped_target:
             if mapped_target not in target_field_names:
                 new_columns.append(src_col)
@@ -123,7 +134,7 @@ def compute_schema_drift(
                 new_columns.append(src_col)
 
     # Removed columns: Columns in target that are not present in source at all
-    mapped_targets = {t for s, t in column_mapping.items() if t}
+    mapped_targets = {t for s, t in sanitized_mapping.items() if t}
     for tgt_col in target_field_names:
         if tgt_col not in source_col_names and tgt_col not in mapped_targets:
             removed_columns.append(tgt_col)

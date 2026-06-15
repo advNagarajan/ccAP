@@ -31,6 +31,12 @@ def callback_target_inferred(message):
             )
             message.ack()
             logger.info(f"Acknowledged target inferred message: {message.message_id}")
+        except ValueError as ve:
+            if "LandingInference not found" in str(ve):
+                logger.warning(f"Discarding poison-pill message because database record was rolled back/not found: {ve}")
+                message.ack()
+            else:
+                raise
         finally:
             db.close()
 

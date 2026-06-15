@@ -29,6 +29,12 @@ def callback_schema_validated(message):
             )
             message.ack()
             logger.info(f"Acknowledged schema validated message: {message.message_id}")
+        except ValueError as ve:
+            if "SchemaValidation not found" in str(ve):
+                logger.warning(f"Discarding poison-pill message because database record was rolled back/not found: {ve}")
+                message.ack()
+            else:
+                raise
         finally:
             db.close()
 

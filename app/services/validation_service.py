@@ -46,7 +46,22 @@ def compute_schema_validation(
     source_col_types = {col["name"]: col.get("observed_types", []) for col in source_cols}
 
     # Extract target schema fields
-    target_fields = schema_definition.get("fields", [])
+    target_fields = []
+    if isinstance(schema_definition, dict):
+        if "fields" in schema_definition and isinstance(schema_definition["fields"], list):
+            target_fields = schema_definition["fields"]
+        else:
+            for col_name, col_type in schema_definition.items():
+                if isinstance(col_type, str):
+                    target_fields.append({"name": col_name, "type": col_type})
+                elif isinstance(col_type, dict):
+                    target_fields.append({
+                        "name": col_name,
+                        "type": col_type.get("type", "VARCHAR")
+                    })
+    elif isinstance(schema_definition, list):
+        target_fields = schema_definition
+
     target_field_names = {field["name"] for field in target_fields}
     target_field_types = {field["name"]: field.get("type", "VARCHAR") for field in target_fields}
 

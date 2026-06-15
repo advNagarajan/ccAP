@@ -95,6 +95,7 @@ def test_compute_schema_drift_datatype_normalization():
 @patch("workers.validation.processor.publish_schema_validated")
 def test_validation_skipped_creates_fallback_request(mock_publish, mock_complete, mock_start):
     db = MagicMock()
+    db.execute.return_value.scalar_one_or_none.return_value = None
     job_id = str(uuid.uuid4())
     artifact_id = str(uuid.uuid4())
     profile_id = str(uuid.uuid4())
@@ -154,6 +155,7 @@ def test_validation_skipped_creates_fallback_request(mock_publish, mock_complete
 @patch("workers.drift.processor.publish_drift_detected")
 def test_critical_drift_creates_fallback_request(mock_publish, mock_complete, mock_start):
     db = MagicMock()
+    db.execute.return_value.scalar_one_or_none.return_value = None
     job_id = str(uuid.uuid4())
     artifact_id = str(uuid.uuid4())
     validation_id = str(uuid.uuid4())

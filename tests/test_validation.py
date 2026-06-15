@@ -6,11 +6,13 @@ from app.models.metadata_profile import MetadataProfile
 from app.models.target_catalog import TargetCatalog
 from app.models.landing_inference import LandingInference
 from app.models.schema_validation import SchemaValidation
+from app.models.job import Job
 from workers.validation.processor import process_schema_validation
 
 def test_validation_passed():
     # 1. Setup mocks
     db = MagicMock()
+    db.execute.return_value.scalar_one_or_none.return_value = None
     job_id = str(uuid.uuid4())
     artifact_id = str(uuid.uuid4())
     profile_id = str(uuid.uuid4())
@@ -62,6 +64,8 @@ def test_validation_passed():
             return profile
         if model_class == TargetCatalog:
             return target
+        if model_class == Job:
+            return Job(job_id=uuid.UUID(job_id), status="RUNNING")
         return None
 
     db.get = db_get
@@ -154,7 +158,9 @@ def test_validation_warning_type_mismatch():
         }
     )
 
-    db.get = lambda model, ident: {LandingInference: inference, MetadataProfile: profile, TargetCatalog: target}[model]
+    db.execute.return_value.scalar_one_or_none.return_value = None
+    job = Job(job_id=uuid.UUID(job_id), status="RUNNING")
+    db.get = lambda model, ident: {LandingInference: inference, MetadataProfile: profile, TargetCatalog: target, Job: job}.get(model)
 
     mock_stage = MagicMock()
     mock_stage.stage_history_id = uuid.uuid4()
@@ -217,7 +223,9 @@ def test_validation_warning_low_coverage():
         }
     )
 
-    db.get = lambda model, ident: {LandingInference: inference, MetadataProfile: profile, TargetCatalog: target}[model]
+    db.execute.return_value.scalar_one_or_none.return_value = None
+    job = Job(job_id=uuid.UUID(job_id), status="RUNNING")
+    db.get = lambda model, ident: {LandingInference: inference, MetadataProfile: profile, TargetCatalog: target, Job: job}.get(model)
 
     mock_stage = MagicMock()
     mock_stage.stage_history_id = uuid.uuid4()
@@ -262,7 +270,7 @@ def test_validation_failed_invalid_mapping():
         metadata_profile_id=uuid.UUID(profile_id),
         target_id=uuid.UUID(target_id),
         confidence_score=0.95,
-        column_mapping={"user_id": "nonexistent_target_column"},  # Invalid target column
+        column_mapping={"nonexistent_source_column": "id"},  # Invalid source column (results in FAILED validation status)
         unmapped_source_columns=[],
         missing_target_columns=[],
         reasoning="Bad mapping"
@@ -280,7 +288,9 @@ def test_validation_failed_invalid_mapping():
         }
     )
 
-    db.get = lambda model, ident: {LandingInference: inference, MetadataProfile: profile, TargetCatalog: target}[model]
+    db.execute.return_value.scalar_one_or_none.return_value = None
+    job = Job(job_id=uuid.UUID(job_id), status="RUNNING")
+    db.get = lambda model, ident: {LandingInference: inference, MetadataProfile: profile, TargetCatalog: target, Job: job}.get(model)
 
     mock_stage = MagicMock()
     mock_stage.stage_history_id = uuid.uuid4()
@@ -323,7 +333,9 @@ def test_validation_skipped():
         reasoning="No target matches"
     )
 
-    db.get = lambda model, ident: {LandingInference: inference, MetadataProfile: profile}[model]
+    db.execute.return_value.scalar_one_or_none.return_value = None
+    job = Job(job_id=uuid.UUID(job_id), status="RUNNING")
+    db.get = lambda model, ident: {LandingInference: inference, MetadataProfile: profile, Job: job}.get(model)
 
     mock_stage = MagicMock()
     mock_stage.stage_history_id = uuid.uuid4()

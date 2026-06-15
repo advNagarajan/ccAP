@@ -413,20 +413,29 @@ def save_metadata(
     metadata,
     db: Session
 ):
+    # Check if metadata profile already exists for this artifact to be idempotent
+    profile = db.execute(
+        select(MetadataProfile).where(
+            MetadataProfile.artifact_id == artifact_id
+        )
+    ).scalar_one_or_none()
 
     embedding_text = generate_embedding_optimized_text(metadata)
 
-    profile = MetadataProfile(
-        job_id=job_id,
-        artifact_id=artifact_id,
-        metadata_json=metadata,
-        embedding_optimized_text=embedding_text
-    )
-
-    db.add(profile)
+    if profile:
+        profile.job_id = job_id
+        profile.metadata_json = metadata
+        profile.embedding_optimized_text = embedding_text
+    else:
+        profile = MetadataProfile(
+            job_id=job_id,
+            artifact_id=artifact_id,
+            metadata_json=metadata,
+            embedding_optimized_text=embedding_text
+        )
+        db.add(profile)
 
     db.commit()
-
     db.refresh(profile)
 
     return profile

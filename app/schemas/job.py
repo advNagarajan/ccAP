@@ -12,6 +12,7 @@ class JobResponse(BaseModel):
     started_at: datetime | None
     completed_at: datetime | None
     error_message: str | None
+    retry_count: int
     created_at: datetime
     updated_at: datetime
 

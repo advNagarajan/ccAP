@@ -1,5 +1,5 @@
 import logging
-from app.services.validation_service import COMPATIBILITY_MATRIX
+from app.constants.compatibility import COMPATIBILITY_MATRIX
 
 logger = logging.getLogger("schema_drift")
 

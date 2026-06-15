@@ -1,0 +1,26 @@
+# Centralized Type Compatibility Matrix
+COMPATIBILITY_MATRIX = {
+    "INTEGER": {"compatible": ["int"], "warning": ["float", "bool", "str"]},
+    "INT": {"compatible": ["int"], "warning": ["float", "bool", "str"]},
+    "BIGINT": {"compatible": ["int"], "warning": ["float", "bool", "str"]},
+    "SMALLINT": {"compatible": ["int"], "warning": ["float", "bool", "str"]},
+    "NUMERIC": {"compatible": ["int", "float"], "warning": ["str"]},
+    "DECIMAL": {"compatible": ["int", "float"], "warning": ["str"]},
+    "FLOAT": {"compatible": ["int", "float"], "warning": ["str"]},
+    "DOUBLE": {"compatible": ["int", "float"], "warning": ["str"]},
+    "REAL": {"compatible": ["int", "float"], "warning": ["str"]},
+    "BOOLEAN": {"compatible": ["bool"], "warning": ["int", "str"]},
+    "BOOL": {"compatible": ["bool"], "warning": ["int", "str"]},
+    "VARCHAR": {"compatible": ["str", "int", "float", "bool", "date", "datetime"], "warning": []},
+    "STRING": {"compatible": ["str", "int", "float", "bool", "date", "datetime"], "warning": []},
+    "TEXT": {"compatible": ["str", "int", "float", "bool", "date", "datetime"], "warning": []},
+    "CHAR": {"compatible": ["str", "int", "float", "bool", "date", "datetime"], "warning": []},
+    "CHARACTER VARYING": {"compatible": ["str", "int", "float", "bool", "date", "datetime"], "warning": []},
+    "UUID": {"compatible": ["str"], "warning": []},
+    "JSON": {"compatible": ["dict", "list", "str"], "warning": []},
+    "JSONB": {"compatible": ["dict", "list", "str"], "warning": []},
+    "DATE": {"compatible": ["date", "datetime"], "warning": ["str"]},
+    "TIMESTAMP": {"compatible": ["datetime", "date"], "warning": ["str"]},
+    "TIMESTAMP WITH TIME ZONE": {"compatible": ["datetime", "date"], "warning": ["str"]},
+    "DATETIME": {"compatible": ["datetime", "date"], "warning": ["str"]}
+}

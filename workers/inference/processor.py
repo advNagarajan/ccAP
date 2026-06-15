@@ -49,13 +49,13 @@ async def infer_target_landing_zone(
     stage = start_stage(job_uuid, "Target Inference", db)
 
     try:
-        # 2. Retrieve Top 20 Candidates using pgvector cosine similarity
+        # 2. Retrieve Top 7 Candidates using pgvector cosine similarity
         distance_expr = TargetCatalog.target_embedding.cosine_distance(profile.source_embedding)
         stmt = (
             select(TargetCatalog, (1.0 - distance_expr).label("similarity"))
             .where(TargetCatalog.target_embedding.is_not(None))
             .order_by(distance_expr)
-            .limit(20)
+            .limit(7)
         )
         
         results = db.execute(stmt).all()
@@ -85,7 +85,7 @@ async def infer_target_landing_zone(
             "which of the provided candidate database tables is the best target landing zone for it.\n\n"
             "Incoming Source Dataset Schema:\n"
             f"{json.dumps(source_json, indent=2)}\n\n"
-            "Candidate Target Databases (Top 20 Retrived via Semantic Search):\n"
+            "Candidate Target Databases (Top 7 Retrieved via Semantic Search):\n"
             f"{candidates_str}\n\n"
             "Instructions:\n"
             "1. Evaluate candidates using the following priority order:\n"
@@ -142,22 +142,42 @@ async def infer_target_landing_zone(
         
         target_uuid = UUID(selected_target_id_str) if selected_target_id_str else None
         
-        # 5. Store result in dedicated landing_inferences table
-        inference = LandingInference(
-            job_id=job_uuid,
-            artifact_id=profile.artifact_id,
-            metadata_profile_id=profile_uuid,
-            target_id=target_uuid,
-            confidence_score=confidence,
-            column_mapping=column_mapping,
-            unmapped_source_columns=unmapped_source,
-            missing_target_columns=missing_target,
-            partitioning_recommendation=partitioning_rec,
-            naming_convention_suggestions=naming_suggestions,
-            reasoning=reasoning,
-            requires_review=requires_review
-        )
-        db.add(inference)
+        # 5. Store result in dedicated landing_inferences table (idempotent lookup)
+        inference = db.execute(
+            select(LandingInference).where(
+                LandingInference.job_id == job_uuid
+            )
+        ).scalar_one_or_none()
+
+        if inference:
+            inference.artifact_id = profile.artifact_id
+            inference.metadata_profile_id = profile_uuid
+            inference.target_id = target_uuid
+            inference.confidence_score = confidence
+            inference.column_mapping = column_mapping
+            inference.unmapped_source_columns = unmapped_source
+            inference.missing_target_columns = missing_target
+            inference.partitioning_recommendation = partitioning_rec
+            inference.naming_convention_suggestions = naming_suggestions
+            inference.reasoning = reasoning
+            inference.requires_review = requires_review
+        else:
+            inference = LandingInference(
+                job_id=job_uuid,
+                artifact_id=profile.artifact_id,
+                metadata_profile_id=profile_uuid,
+                target_id=target_uuid,
+                confidence_score=confidence,
+                column_mapping=column_mapping,
+                unmapped_source_columns=unmapped_source,
+                missing_target_columns=missing_target,
+                partitioning_recommendation=partitioning_rec,
+                naming_convention_suggestions=naming_suggestions,
+                reasoning=reasoning,
+                requires_review=requires_review
+            )
+            db.add(inference)
+            
         db.commit()
         db.refresh(inference)
         

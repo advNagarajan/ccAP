@@ -44,43 +44,80 @@ def process_schema_validation(
         if profile is None:
             raise ValueError(f"MetadataProfile not found: {metadata_profile_id}")
 
+        from sqlalchemy import select
+
+        # Idempotent lookups
+        val_record = db.execute(
+            select(SchemaValidation).where(
+                SchemaValidation.job_id == job_uuid
+            )
+        ).scalar_one_or_none()
+
+        fallback_req = db.execute(
+            select(SchemaFallbackRequest).where(
+                SchemaFallbackRequest.job_id == job_uuid
+            )
+        ).scalar_one_or_none()
+
         # Handle skipped validation (TARGET_NOT_FOUND)
         if not inference.target_id:
             logger.info(f"Validation SKIPPED for job_id={job_id} (no target mapped).")
-            val_record = SchemaValidation(
-                job_id=job_uuid,
-                artifact_id=UUID(artifact_id),
-                inference_id=inference_uuid,
-                target_id=None,
-                validation_status="SKIPPED",
-                coverage_percentage=0.0,
-                target_match_percentage=0.0,
-                mapped_column_count=0,
-                source_column_count=0,
-                target_column_count=0,
-                report_json={
-                    "report_version": "1.0",
-                    "invalid_mappings": [],
-                    "datatype_issues": [],
-                    "missing_target_columns": [],
-                    "additional_source_columns": [],
-                    "coverage_percentage": 0.0,
-                    "target_match_percentage": 0.0
-                }
-            )
-            db.add(val_record)
+            
+            report_data = {
+                "report_version": "1.0",
+                "invalid_mappings": [],
+                "datatype_issues": [],
+                "missing_target_columns": [],
+                "additional_source_columns": [],
+                "coverage_percentage": 0.0,
+                "target_match_percentage": 0.0
+            }
+
+            if val_record:
+                val_record.artifact_id = UUID(artifact_id)
+                val_record.inference_id = inference_uuid
+                val_record.target_id = None
+                val_record.validation_status = "SKIPPED"
+                val_record.coverage_percentage = 0.0
+                val_record.target_match_percentage = 0.0
+                val_record.mapped_column_count = 0
+                val_record.source_column_count = 0
+                val_record.target_column_count = 0
+                val_record.report_json = report_data
+            else:
+                val_record = SchemaValidation(
+                    job_id=job_uuid,
+                    artifact_id=UUID(artifact_id),
+                    inference_id=inference_uuid,
+                    target_id=None,
+                    validation_status="SKIPPED",
+                    coverage_percentage=0.0,
+                    target_match_percentage=0.0,
+                    mapped_column_count=0,
+                    source_column_count=0,
+                    target_column_count=0,
+                    report_json=report_data
+                )
+                db.add(val_record)
+            
             db.commit()
             db.refresh(val_record)
 
-            # Create fallback request
-            fallback_req = SchemaFallbackRequest(
-                job_id=job_uuid,
-                artifact_id=UUID(artifact_id),
-                validation_id=val_record.validation_id,
-                request_reason="TARGET_NOT_FOUND",
-                request_status="PENDING"
-            )
-            db.add(fallback_req)
+            # Create or update fallback request
+            if fallback_req:
+                fallback_req.artifact_id = UUID(artifact_id)
+                fallback_req.validation_id = val_record.validation_id
+                fallback_req.request_reason = "TARGET_NOT_FOUND"
+                fallback_req.request_status = "PENDING"
+            else:
+                fallback_req = SchemaFallbackRequest(
+                    job_id=job_uuid,
+                    artifact_id=UUID(artifact_id),
+                    validation_id=val_record.validation_id,
+                    request_reason="TARGET_NOT_FOUND",
+                    request_status="PENDING"
+                )
+                db.add(fallback_req)
 
             # Update parent job status to PENDING_REVIEW
             job = db.get(Job, job_uuid)
@@ -123,33 +160,52 @@ def process_schema_validation(
             warning_threshold=settings.VALIDATION_WARNING_THRESHOLD
         )
 
-        val_record = SchemaValidation(
-            job_id=job_uuid,
-            artifact_id=UUID(artifact_id),
-            inference_id=inference_uuid,
-            target_id=target.target_id,
-            validation_status=results["validation_status"],
-            coverage_percentage=results["coverage_percentage"],
-            target_match_percentage=results["target_match_percentage"],
-            mapped_column_count=results["mapped_column_count"],
-            source_column_count=results["source_column_count"],
-            target_column_count=results["target_column_count"],
-            report_json=results["report_json"]
-        )
-        db.add(val_record)
+        if val_record:
+            val_record.artifact_id = UUID(artifact_id)
+            val_record.inference_id = inference_uuid
+            val_record.target_id = target.target_id
+            val_record.validation_status = results["validation_status"]
+            val_record.coverage_percentage = results["coverage_percentage"]
+            val_record.target_match_percentage = results["target_match_percentage"]
+            val_record.mapped_column_count = results["mapped_column_count"]
+            val_record.source_column_count = results["source_column_count"]
+            val_record.target_column_count = results["target_column_count"]
+            val_record.report_json = results["report_json"]
+        else:
+            val_record = SchemaValidation(
+                job_id=job_uuid,
+                artifact_id=UUID(artifact_id),
+                inference_id=inference_uuid,
+                target_id=target.target_id,
+                validation_status=results["validation_status"],
+                coverage_percentage=results["coverage_percentage"],
+                target_match_percentage=results["target_match_percentage"],
+                mapped_column_count=results["mapped_column_count"],
+                source_column_count=results["source_column_count"],
+                target_column_count=results["target_column_count"],
+                report_json=results["report_json"]
+            )
+            db.add(val_record)
+        
         db.commit()
         db.refresh(val_record)
 
         # Handle failed validation (VALIDATION_FAILED)
         if val_record.validation_status == "FAILED":
-            fallback_req = SchemaFallbackRequest(
-                job_id=job_uuid,
-                artifact_id=UUID(artifact_id),
-                validation_id=val_record.validation_id,
-                request_reason="VALIDATION_FAILED",
-                request_status="PENDING"
-            )
-            db.add(fallback_req)
+            if fallback_req:
+                fallback_req.artifact_id = UUID(artifact_id)
+                fallback_req.validation_id = val_record.validation_id
+                fallback_req.request_reason = "VALIDATION_FAILED"
+                fallback_req.request_status = "PENDING"
+            else:
+                fallback_req = SchemaFallbackRequest(
+                    job_id=job_uuid,
+                    artifact_id=UUID(artifact_id),
+                    validation_id=val_record.validation_id,
+                    request_reason="VALIDATION_FAILED",
+                    request_status="PENDING"
+                )
+                db.add(fallback_req)
 
             job = db.get(Job, job_uuid)
             if job:

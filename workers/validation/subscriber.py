@@ -6,11 +6,15 @@ from app.core.settings import settings
 from app.db.database import SessionLocal
 from workers.validation.processor import process_schema_validation
 
+from workers.common.retry_handler import handle_worker_failure, reset_retry_count
+
 logger = logging.getLogger("schema_validation")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
 
 def callback_target_inferred(message):
+    db = SessionLocal()
+    job_id = None
     try:
         logger.info(f"Received target inferred message: {message.message_id}")
         payload = json.loads(message.data.decode("utf-8"))
@@ -19,7 +23,6 @@ def callback_target_inferred(message):
         metadata_profile_id = payload["metadata_profile_id"]
         inference_id = payload["inference_id"]
 
-        db = SessionLocal()
         try:
             # Execute synchronous validation pipeline
             process_schema_validation(
@@ -29,6 +32,7 @@ def callback_target_inferred(message):
                 inference_id=inference_id,
                 db=db
             )
+            reset_retry_count(job_id, db)
             message.ack()
             logger.info(f"Acknowledged target inferred message: {message.message_id}")
         except ValueError as ve:
@@ -37,12 +41,18 @@ def callback_target_inferred(message):
                 message.ack()
             else:
                 raise
-        finally:
-            db.close()
 
     except Exception as e:
         logger.error(f"Failed to process target inferred message: {e}")
-        message.nack()
+        handle_worker_failure(
+            job_id=job_id,
+            worker_name="schema_validation",
+            error=e,
+            message=message,
+            db=db
+        )
+    finally:
+        db.close()
 
 
 def start_subscriber():

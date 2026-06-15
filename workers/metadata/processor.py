@@ -201,27 +201,6 @@ def process_dataset_received(message_data: bytes):
             except Exception:
                 pass
 
-        try:
-
-            job = db.get(Job, job_id)
-
-            if job is not None:
-
-                job.status = JobStatus.FAILED
-                job.current_stage = "Metadata Extraction Failed"
-                job.error_message = str(e)
-
-                db.commit()
-
-                publish_job_failed(
-                    job.job_id,
-                    job.source_id,
-                    str(e)
-                )
-
-        except Exception:
-            pass
-
         raise
 
     finally:

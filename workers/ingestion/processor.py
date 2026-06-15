@@ -232,38 +232,7 @@ def process_ingestion_requested(message_data: bytes):
             except Exception:
                 pass
 
-        try:
-
-            failure_stage = start_stage(
-                job_id,
-                "Pipeline Failure",
-                db
-            )
-
-            fail_stage(
-                failure_stage.stage_history_id,
-                e,
-                db
-            )
-
-            job = db.get(Job, job_id)
-
-            if job is not None:
-
-                job.status = JobStatus.FAILED
-                job.current_stage = "Failed"
-                job.error_message = str(e)
-
-                db.commit()
-
-                publish_job_failed(
-                    job.job_id,
-                    job.source_id,
-                    str(e)
-                )
-
-        except Exception:
-            pass
+        raise
 
     finally:
 

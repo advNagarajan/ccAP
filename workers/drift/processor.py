@@ -32,6 +32,8 @@ def process_schema_drift(
     artifact_uuid = UUID(artifact_id)
     validation_uuid = UUID(validation_id)
 
+    from sqlalchemy import select
+
     logger.info(f"Processor starting schema drift detection for job={job_id} validation={validation_id}")
     stage = start_stage(job_uuid, "Schema Drift Detection", db)
 
@@ -51,24 +53,44 @@ def process_schema_drift(
         if profile is None:
             raise ValueError(f"MetadataProfile not found: {inference.metadata_profile_id}")
 
+        # Idempotent lookup for SchemaDrift
+        drift_record = db.execute(
+            select(SchemaDrift).where(
+                SchemaDrift.job_id == job_uuid
+            )
+        ).scalar_one_or_none()
+
         # Handle skipped drift check (e.g. validation skipped/no target catalog mapped)
         if not val_record.target_id:
             logger.info(f"Drift detection SKIPPED for job_id={job_id} (no target mapped).")
-            drift_record = SchemaDrift(
-                job_id=job_uuid,
-                artifact_id=artifact_uuid,
-                validation_id=validation_uuid,
-                target_id=None,
-                drift_status="SKIPPED",
-                drift_score=0.0,
-                drift_summary={
+            if drift_record:
+                drift_record.artifact_id = artifact_uuid
+                drift_record.validation_id = validation_uuid
+                drift_record.target_id = None
+                drift_record.drift_status = "SKIPPED"
+                drift_record.drift_score = 0.0
+                drift_record.drift_summary = {
                     "new_columns": [],
                     "removed_columns": [],
                     "datatype_changes": [],
                     "renamed_columns": []
                 }
-            )
-            db.add(drift_record)
+            else:
+                drift_record = SchemaDrift(
+                    job_id=job_uuid,
+                    artifact_id=artifact_uuid,
+                    validation_id=validation_uuid,
+                    target_id=None,
+                    drift_status="SKIPPED",
+                    drift_score=0.0,
+                    drift_summary={
+                        "new_columns": [],
+                        "removed_columns": [],
+                        "datatype_changes": [],
+                        "renamed_columns": []
+                    }
+                )
+                db.add(drift_record)
             db.commit()
             db.refresh(drift_record)
 
@@ -108,23 +130,31 @@ def process_schema_drift(
         drift_score = drift_results["drift_score"]
         drift_summary = drift_results["drift_summary"]
 
-        drift_record = SchemaDrift(
-            job_id=job_uuid,
-            artifact_id=artifact_uuid,
-            validation_id=validation_uuid,
-            target_id=target.target_id,
-            drift_status=drift_status,
-            drift_score=drift_score,
-            drift_summary=drift_summary
-        )
-        db.add(drift_record)
+        if drift_record:
+            drift_record.artifact_id = artifact_uuid
+            drift_record.validation_id = validation_uuid
+            drift_record.target_id = target.target_id
+            drift_record.drift_status = drift_status
+            drift_record.drift_score = drift_score
+            drift_record.drift_summary = drift_summary
+        else:
+            drift_record = SchemaDrift(
+                job_id=job_uuid,
+                artifact_id=artifact_uuid,
+                validation_id=validation_uuid,
+                target_id=target.target_id,
+                drift_status=drift_status,
+                drift_score=drift_score,
+                drift_summary=drift_summary
+            )
+            db.add(drift_record)
         db.commit()
         db.refresh(drift_record)
 
         # Handle CRITICAL_DRIFT
         if drift_status == "CRITICAL_DRIFT":
             # Check if there is already an active fallback request for this job to be idempotent
-            stmt = (
+            fallback_req = (
                 db.query(SchemaFallbackRequest)
                 .filter(
                     SchemaFallbackRequest.job_id == job_uuid,
@@ -132,7 +162,7 @@ def process_schema_drift(
                 )
                 .first()
             )
-            if not stmt:
+            if not fallback_req:
                 fallback_req = SchemaFallbackRequest(
                     job_id=job_uuid,
                     artifact_id=artifact_uuid,
@@ -142,11 +172,16 @@ def process_schema_drift(
                     request_status="PENDING"
                 )
                 db.add(fallback_req)
+            else:
+                fallback_req.artifact_id = artifact_uuid
+                fallback_req.validation_id = validation_uuid
+                fallback_req.drift_id = drift_record.drift_id
+                fallback_req.request_reason = "CRITICAL_DRIFT"
 
-                job = db.get(Job, job_uuid)
-                if job:
-                    job.status = "PENDING_REVIEW"
-                db.commit()
+            job = db.get(Job, job_uuid)
+            if job:
+                job.status = "PENDING_REVIEW"
+            db.commit()
 
         # Update stage history
         complete_stage(

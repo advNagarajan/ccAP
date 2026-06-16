@@ -63,6 +63,12 @@ class Job(Base):
         default=0
     )
 
+    parent_job_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("metadata.jobs.job_id"),
+        nullable=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         server_default=func.now()

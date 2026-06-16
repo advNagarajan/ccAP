@@ -13,6 +13,7 @@ class JobResponse(BaseModel):
     completed_at: datetime | None
     error_message: str | None
     retry_count: int
+    parent_job_id: UUID | None = None
     created_at: datetime
     updated_at: datetime
 

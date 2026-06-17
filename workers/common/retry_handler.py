@@ -154,6 +154,61 @@ def delayed_nack_worker(message, delay_seconds: int, job_id: str, worker_name: s
     except Exception as nack_err:
         logger.error(f"Failed to nack message {message.message_id} in background thread: {nack_err}")
 
+def get_retry_delay(e: Exception, attempt: int) -> tuple[int, str]:
+    """
+    Dynamically calculates retry delay based on the specific type of transient error:
+    - Quota/Rate Limit (429/ResourceExhausted): 30s (1st retry), 90s (2nd retry)
+    - Major Network/Outage (is_network_infra_error): 300s (1st retry), 1800s (2nd retry)
+    - Timeout (socket.timeout/TimeoutError/DeadlineExceeded): 15s (1st retry), 45s (2nd retry)
+    - Standard/Database Transient Errors: 10s (1st retry), 30s (2nd retry)
+    """
+    err_str = str(e).lower()
+    is_rate_limit = False
+
+    # Check for Google Quota / Rate limits
+    if isinstance(e, google_exceptions.GoogleAPICallError) and e.code == 429:
+        is_rate_limit = True
+    elif isinstance(e, google_exceptions.ResourceExhausted):
+        is_rate_limit = True
+    elif isinstance(e, requests.exceptions.HTTPError) and e.response is not None and e.response.status_code == 429:
+        is_rate_limit = True
+    elif httpx is not None and isinstance(e, httpx.HTTPError) and hasattr(e, 'response') and e.response is not None and e.response.status_code == 429:
+        is_rate_limit = True
+    elif any(keyword in err_str for keyword in ["rate limit", "resource_exhausted", "quota limit", "too many requests"]):
+        is_rate_limit = True
+
+    if is_rate_limit:
+        delay = 30 if attempt == 2 else 90
+        return delay, f"{delay}s (rate limiting/quota exhaustion, waiting for bucket refill)"
+
+    # Check for major infra issue
+    if is_network_infra_error(e):
+        delay = 300 if attempt == 2 else getattr(settings, "RETRY_DELAY_INFRA_ERROR", 1800)
+        return delay, f"{delay}s (network offline/cloud database infrastructure downtime)"
+
+    # Check for timeouts
+    is_timeout = False
+    if isinstance(e, (socket.timeout, TimeoutError, google_exceptions.DeadlineExceeded)):
+        is_timeout = True
+    elif isinstance(e, requests.exceptions.Timeout):
+        is_timeout = True
+    elif httpx is not None and isinstance(e, httpx.TimeoutException):
+        is_timeout = True
+    elif "timeout" in err_str or "deadline exceeded" in err_str:
+        is_timeout = True
+
+    if is_timeout:
+        delay = 15 if attempt == 2 else 45
+        return delay, f"{delay}s (request timeout/deadline exceeded)"
+
+    # Default transient/database error
+    delay = (
+        getattr(settings, "RETRY_DELAY_TRANSIENT_ERROR_1", 10)
+        if attempt == 2 else
+        getattr(settings, "RETRY_DELAY_TRANSIENT_ERROR_2", 30)
+    )
+    return delay, f"{delay}s (general transient API/database anomaly)"
+
 def handle_worker_failure(job_id: str, worker_name: str, error: Exception, message, db: Session):
     """
     Main orchestrator for managing worker execution failures:
@@ -199,22 +254,11 @@ def handle_worker_failure(job_id: str, worker_name: str, error: Exception, messa
         logger.info(f"Option A Fallback: DB reports retry attempt={attempt} for job={job_id}")
 
     is_transient = is_transient_error(error)
-    is_infra_issue = is_network_infra_error(error)
 
     # 2 retries max = 3 total attempts
     if is_transient and attempt <= 3:
-        # Calculate delay based on failure type (using configurable settings)
-        if is_infra_issue:
-            delay_seconds = getattr(settings, "RETRY_DELAY_INFRA_ERROR", 1800)  # Configurable in .env
-            delay_desc = f"{delay_seconds}s (internet/cloud infra issue)"
-        else:
-            # 10s for 1st retry (attempt 2), 30s for 2nd retry (attempt 3) by default
-            delay_seconds = (
-                getattr(settings, "RETRY_DELAY_TRANSIENT_ERROR_1", 10) 
-                if attempt == 2 else 
-                getattr(settings, "RETRY_DELAY_TRANSIENT_ERROR_2", 30)
-            )
-            delay_desc = f"{delay_seconds}s (transient rate limit/API error)"
+        # Calculate delay dynamically based on failure type
+        delay_seconds, delay_desc = get_retry_delay(error, attempt)
 
         logger.warning(
             f"Transient failure in worker '{worker_name}' for Job {job_id} (Attempt {attempt}/3). "

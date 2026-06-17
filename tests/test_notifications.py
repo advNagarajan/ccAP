@@ -6,7 +6,7 @@ from app.models.db.notification_recipient import NotificationRecipient
 from app.services.notification.slack import SlackNotificationChannel
 from app.services.notification.smtp import SmtpNotificationChannel
 from app.services.notification.registry import NOTIFICATION_CHANNELS
-from workers.notification.subscriber import handle_notification_message
+from workers.notification.processor import process_notification
 
 @patch("app.services.notification.smtp.smtplib.SMTP")
 def test_smtp_notification_channel_db_lookup(mock_smtp_cls):
@@ -58,10 +58,8 @@ def test_slack_notifier_stub_no_crash():
     assert isinstance(NOTIFICATION_CHANNELS[1], SmtpNotificationChannel)
 
 
-@patch("workers.notification.subscriber.SessionLocal")
-def test_subscriber_message_routing_completed(mock_session_cls):
+def test_subscriber_message_routing_completed():
     mock_db = MagicMock()
-    mock_session_cls.return_value = mock_db
     
     # Mock active recipients
     mock_db.execute.return_value.scalars.return_value.all.return_value = ["admin@example.com"]
@@ -73,9 +71,6 @@ def test_subscriber_message_routing_completed(mock_session_cls):
         "source_id": str(source_id)
     }
 
-    import json
-    data_bytes = json.dumps(payload).encode("utf-8")
-
     with patch("app.services.notification.smtp.smtplib.SMTP") as mock_smtp, \
          patch("app.services.notification.slack.settings") as mock_slack_settings, \
          patch("app.services.notification.smtp.settings") as mock_smtp_settings:
@@ -85,7 +80,7 @@ def test_subscriber_message_routing_completed(mock_session_cls):
         mock_slack_settings.SLACK_WEBHOOK_URL = None
         
         # Run event routing helper
-        handle_notification_message("job-completed", data_bytes)
+        process_notification("job-completed", payload, mock_db)
         
         # Ensure smtplib sent email
         mock_smtp.assert_called_once()

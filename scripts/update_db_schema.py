@@ -14,8 +14,16 @@ def run_migration():
                 ADD COLUMN IF NOT EXISTS parent_job_id UUID 
                 REFERENCES metadata.jobs(job_id) NULL;
             """))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS metadata.notification_recipients (
+                    recipient_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    email VARCHAR(255) NOT NULL,
+                    is_active BOOLEAN NOT NULL DEFAULT true,
+                    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now()
+                );
+            """))
             conn.commit()
-            logger.info("Successfully added parent_job_id column to metadata.jobs table.")
+            logger.info("Successfully added parent_job_id column and created metadata.notification_recipients table.")
     except Exception as e:
         logger.error(f"Migration failed: {e}")
         raise

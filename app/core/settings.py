@@ -44,6 +44,20 @@ class Settings(BaseSettings):
     PUBSUB_SUBSCRIPTION_TARGET_MUTATED: str
     PUBSUB_SUBSCRIPTION_FEEDBACK_SUBMITTED: str
 
+    # Notification Subscriptions
+    PUBSUB_SUBSCRIPTION_JOB_COMPLETED: str | None = None
+    PUBSUB_SUBSCRIPTION_JOB_FAILED: str | None = None
+    PUBSUB_SUBSCRIPTION_FALLBACK_LANDING_CREATED: str | None = None
+    PUBSUB_SUBSCRIPTION_DEAD_LETTER: str = "job-failures-dead-letter-sub"
+
+    # Notification Channels (Slack & SMTP)
+    SLACK_WEBHOOK_URL: str | None = None
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int | None = None
+    SMTP_USER: str | None = None
+    SMTP_PASSWORD: str | None = None
+    NOTIFICATION_EMAIL_SENDER: str | None = None
+
     # Thresholds
     INFERENCE_CONFIDENCE_THRESHOLD: float = 0.70
     VALIDATION_WARNING_THRESHOLD: float = 1.0

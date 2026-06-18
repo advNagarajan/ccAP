@@ -248,15 +248,15 @@ def handle_worker_failure(job_id: str, worker_name: str, error: Exception, messa
             attempt = job.retry_count + 1
     else:
         # DB fallback (local development / emulator)
+        attempt = job.retry_count + 1
         job.retry_count += 1
         db.commit()
-        attempt = job.retry_count + 1
         logger.info(f"Option A Fallback: DB reports retry attempt={attempt} for job={job_id}")
 
     is_transient = is_transient_error(error)
 
     # 2 retries max = 3 total attempts
-    if is_transient and attempt <= 3:
+    if is_transient and attempt <= 2:
         # Calculate delay dynamically based on failure type
         delay_seconds, delay_desc = get_retry_delay(error, attempt)
 
@@ -278,7 +278,7 @@ def handle_worker_failure(job_id: str, worker_name: str, error: Exception, messa
 
     else:
         # Non-transient error OR max retries (3 attempts) exceeded
-        reason_desc = "max retries exceeded" if attempt > 3 else "non-retryable permanent error"
+        reason_desc = "max retries exceeded" if attempt >= 3 else "non-retryable permanent error"
         error_msg = f"Failed in worker '{worker_name}': {str(error)} ({reason_desc})"
         
         logger.error(f"Job {job_id} failed permanently in worker '{worker_name}' due to: {error_msg}")

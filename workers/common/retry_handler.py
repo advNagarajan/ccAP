@@ -310,7 +310,7 @@ def handle_worker_failure(job_id: str, worker_name: str, error: Exception, messa
 
         # Also publish standard job-failed event
         try:
-            publish_job_failed(job.job_id, job.source_id, error_msg)
+            publish_job_failed(job.job_id, job.source_id, error_msg, failed_at_worker=worker_name, attempt_number=attempt)
         except Exception as pub_failed_err:
             logger.error(f"Failed to publish standard job failed event for job={job_id}: {pub_failed_err}")
 

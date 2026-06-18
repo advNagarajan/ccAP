@@ -21,10 +21,19 @@ def process_notification(topic: str, payload: dict, db: Session) -> None:
         failed_worker = payload.get("failed_at_worker")
         error = payload.get("error_message")
         attempt = payload.get("attempt_number")
+        reason = payload.get("reason_type")
         message += f"Failed Worker: {failed_worker}\nAttempt Number: {attempt}\nError: {error}"
+        if reason:
+            message += f"\nReason Type: {reason}"
     elif topic == "job-failed":
         subject = "Alert: Job Processing Failed"
         error = payload.get("error_message")
+        failed_worker = payload.get("failed_at_worker")
+        attempt = payload.get("attempt_number")
+        if failed_worker:
+            message += f"Failed Worker: {failed_worker}\n"
+        if attempt:
+            message += f"Attempt Number: {attempt}\n"
         message += f"Error Details: {error}"
     elif topic == "job-completed":
         subject = "Success: Job Processing Completed Successfully"

@@ -159,8 +159,13 @@ def test_handle_worker_failure_transient_exhausted(mock_pub_job_failed, mock_pub
         }
     )
 
-    # Verify publish standard job failed event
-    mock_pub_job_failed.assert_called_once_with("some-job-id", "source-uuid", ANY)
+    mock_pub_job_failed.assert_called_once_with(
+        "some-job-id",
+        "source-uuid",
+        ANY,
+        failed_at_worker="ingestion",
+        attempt_number=4
+    )
 
     # Verify message is acknowledged to clear from Pub/Sub
     message.ack.assert_called_once()

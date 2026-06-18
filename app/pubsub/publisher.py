@@ -89,12 +89,16 @@ def publish_job_completed(job_id, source_id, recommendations_count: int = 0, tar
     )
 
 
-def publish_job_failed(job_id, source_id, error_message):
+def publish_job_failed(job_id, source_id, error_message, failed_at_worker=None, attempt_number=None):
     payload = {
         "job_id": str(job_id),
         "source_id": str(source_id),
         "error_message": error_message
     }
+    if failed_at_worker:
+        payload["failed_at_worker"] = str(failed_at_worker)
+    if attempt_number is not None:
+        payload["attempt_number"] = int(attempt_number)
 
     return publish_event(
         settings.PUBSUB_TOPIC_JOB_FAILED,

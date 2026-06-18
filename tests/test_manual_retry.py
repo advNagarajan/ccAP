@@ -82,12 +82,20 @@ def test_retry_job_success(mock_start_stage, mock_publish):
         job_id=job_id,
         source_id=source_id,
         status=JobStatus.FAILED,
-        parent_job_id=None
+        parent_job_id=None,
+        retry_count=0,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
     )
     
     # Mock lookup
-    mock_db.get.side_effect = None
-    mock_db.get.return_value = old_job
+    def mock_get(model_class, ident):
+        if model_class == Job:
+            return old_job
+        return MagicMock()
+
+    mock_db.get.side_effect = mock_get
+    mock_db.get.return_value = None
     mock_db.execute.return_value = MagicMock()
     
     # Mock stage creation
@@ -103,6 +111,9 @@ def test_retry_job_success(mock_start_stage, mock_publish):
     assert data["status"] == JobStatus.RECEIVED
     assert data["source_id"] == str(source_id)
     assert data["parent_job_id"] == str(job_id)
+
+    # Ensure old job transitioned to RETRIED
+    assert old_job.status == JobStatus.RETRIED
 
     # Ensure DB interactions occurred
     mock_db.add.assert_called_once()
@@ -157,3 +168,57 @@ def test_retry_job_max_limit_exceeded(mock_start_stage, mock_publish):
     response = client.post(f"/jobs/{failed_id}/retry")
     assert response.status_code == 400
     assert "Maximum retry limit (2) reached" in response.json()["detail"]
+
+
+def test_kill_job_not_found():
+    mock_db.get.side_effect = None
+    mock_db.get.return_value = None
+
+    response = client.post(f"/jobs/{uuid.uuid4()}/kill")
+    assert response.status_code == 404
+    assert "Job not found" in response.json()["detail"]
+
+
+def test_kill_job_invalid_status():
+    job_id = uuid.uuid4()
+    mock_job = Job(
+        job_id=job_id,
+        source_id=uuid.uuid4(),
+        status=JobStatus.COMPLETED,
+        parent_job_id=None,
+        retry_count=0,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
+    )
+    mock_db.get.side_effect = None
+    mock_db.get.return_value = mock_job
+
+    response = client.post(f"/jobs/{job_id}/kill")
+    assert response.status_code == 400
+    assert "Cannot kill a job" in response.json()["detail"]
+
+
+def test_kill_job_success():
+    job_id = uuid.uuid4()
+    mock_job = Job(
+        job_id=job_id,
+        source_id=uuid.uuid4(),
+        status=JobStatus.FAILED,
+        parent_job_id=None,
+        retry_count=0,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
+    )
+    mock_db.get.side_effect = None
+    mock_db.get.return_value = mock_job
+    mock_db.execute.return_value = MagicMock()
+
+    response = client.post(f"/jobs/{job_id}/kill")
+    assert response.status_code == 200
+    
+    data = response.json()
+    assert data["status"] == JobStatus.CANCELLED
+    assert mock_job.status == JobStatus.CANCELLED
+    assert "manually terminated" in mock_job.error_message
+
+    mock_db.commit.assert_called()

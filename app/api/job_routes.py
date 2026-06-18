@@ -27,7 +27,9 @@ VALID_JOB_STATUSES = {
     JobStatus.VALIDATING,
     JobStatus.RUNNING,
     JobStatus.COMPLETED,
-    JobStatus.FAILED
+    JobStatus.FAILED,
+    JobStatus.CANCELLED,
+    JobStatus.RETRIED
 }
 
 @router.get(
@@ -131,7 +133,8 @@ def retry_job(
         )
     )
 
-    # 5. Create the new job
+    # 5. Create the new job & update old job status to RETRIED
+    old_job.status = JobStatus.RETRIED
     new_job = Job(
         source_id=old_job.source_id,
         status=JobStatus.RECEIVED,
@@ -158,3 +161,47 @@ def retry_job(
         )
 
     return new_job
+
+
+@router.post(
+    "/jobs/{job_id}/kill",
+    response_model=JobResponse,
+    status_code=200
+)
+def kill_job(
+    job_id: UUID,
+    db: Session = Depends(get_db)
+):
+    # 1. Fetch the job
+    job = db.get(Job, job_id)
+    if job is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Job not found"
+        )
+
+    # 2. Only allow killing active or failed jobs
+    if job.status not in (JobStatus.RUNNING, JobStatus.FAILED, JobStatus.RECEIVED, JobStatus.VALIDATING):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot kill a job with status {job.status}"
+        )
+
+    # 3. Update status to CANCELLED
+    job.status = JobStatus.CANCELLED
+    job.error_message = "Job manually terminated/killed by user."
+    
+    # 4. Cleanup any pending schema fallback requests
+    from app.models.db.schema_fallback_request import SchemaFallbackRequest
+    db.execute(
+        update(SchemaFallbackRequest)
+        .where(
+            SchemaFallbackRequest.job_id == job_id,
+            SchemaFallbackRequest.request_status == "PENDING"
+        )
+        .values(request_status="CANCELLED")
+    )
+    
+    db.commit()
+    db.refresh(job)
+    return job

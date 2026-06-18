@@ -4,3 +4,5 @@ class JobStatus:
     RUNNING = "RUNNING"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+    RETRIED = "RETRIED"

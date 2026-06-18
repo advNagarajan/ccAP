@@ -28,7 +28,12 @@ def process_notification(topic: str, payload: dict, db: Session) -> None:
         message += f"Error Details: {error}"
     elif topic == "job-completed":
         subject = "Success: Job Processing Completed Successfully"
-        message += "The landing and inference job finished without errors."
+        rec_count = payload.get("recommendations_count", 0)
+        target_name = payload.get("target_name")
+        message += "The landing and inference job finished without errors.\n"
+        if target_name:
+            message += f"Target Table: {target_name}\n"
+        message += f"Recommendations Generated: {rec_count}"
     elif topic == "fallback-landing-created":
         subject = "Notice: Fallback Landing Schema Created"
         backup_table = payload.get("backup_table_name")

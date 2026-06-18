@@ -75,10 +75,12 @@ def publish_metadata_extracted(
         payload
     )
 
-def publish_job_completed(job_id, source_id):
+def publish_job_completed(job_id, source_id, recommendations_count: int = 0, target_name: str | None = None):
     payload = {
         "job_id": str(job_id),
-        "source_id": str(source_id)
+        "source_id": str(source_id),
+        "recommendations_count": recommendations_count,
+        "target_name": target_name
     }
 
     return publish_event(

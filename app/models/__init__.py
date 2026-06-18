@@ -9,6 +9,7 @@ from app.models.db.landing_inference import LandingInference
 from app.models.db.schema_validation import SchemaValidation
 from app.models.db.schema_drift import SchemaDrift
 from app.models.db.schema_fallback_request import SchemaFallbackRequest
+from app.models.db.schema_recommendation import SchemaRecommendation
 from app.models.db.job_stage_history import JobStageHistory
 from app.models.db.metadata_profile import MetadataProfile
 from app.models.db.notification_recipient import NotificationRecipient

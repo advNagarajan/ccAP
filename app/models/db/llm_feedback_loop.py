@@ -40,24 +40,40 @@ class LlmFeedbackLoop(Base):
         nullable=False
     )
 
-    target_id: Mapped[str] = mapped_column(
+    target_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("metadata.target_catalog.target_id", ondelete="CASCADE"),
-        nullable=False
+        nullable=True
     )
 
-    observed_flattened_paths: Mapped[list[str]] = mapped_column(
+    observed_flattened_paths: Mapped[list[str] | None] = mapped_column(
         ARRAY(Text),
-        nullable=False
+        nullable=True
     )
 
-    user_action: Mapped[str] = mapped_column(
+    user_action: Mapped[str | None] = mapped_column(
         String(50),
-        nullable=False
+        nullable=True
     )
 
     engineer_notes: Mapped[str | None] = mapped_column(
         Text,
+        nullable=True
+    )
+
+    stage: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True
+    )
+
+    response_in_question: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True
+    )
+
+    user_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("metadata.users.user_id", ondelete="SET NULL"),
         nullable=True
     )
 
@@ -67,3 +83,4 @@ class LlmFeedbackLoop(Base):
     )
 
     target = relationship("TargetCatalog")
+

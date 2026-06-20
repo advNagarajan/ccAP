@@ -13,6 +13,8 @@ from app.models.db.schema_recommendation import SchemaRecommendation
 from app.models.db.job_stage_history import JobStageHistory
 from app.models.db.metadata_profile import MetadataProfile
 from app.models.db.notification_recipient import NotificationRecipient
+from app.models.db.user import User
+
 
 # Domain Models / Dataclasses / Schemas
 from app.models.domain.artifact import Artifact

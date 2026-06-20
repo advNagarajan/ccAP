@@ -20,35 +20,40 @@ def submit_feedback(
     payload: FeedbackCreate,
     db: Session = Depends(get_db)
 ):
-    target = db.get(TargetCatalog, payload.target_id)
-
-    if target is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Target not found"
-        )
+    if payload.target_id is not None:
+        target = db.get(TargetCatalog, payload.target_id)
+        if target is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Target not found"
+            )
 
     feedback = LlmFeedbackLoop(
         job_id=payload.job_id,
         target_id=payload.target_id,
         observed_flattened_paths=payload.observed_flattened_paths,
         user_action=payload.user_action,
-        engineer_notes=payload.engineer_notes
+        engineer_notes=payload.engineer_notes,
+        stage=payload.stage,
+        response_in_question=payload.response_in_question,
+        user_id=payload.user_id
     )
 
     db.add(feedback)
     db.commit()
     db.refresh(feedback)
 
-    # Trigger async feedback loops processing
-    try:
-        publish_feedback_submitted(
-            job_id=feedback.job_id,
-            target_id=feedback.target_id,
-            user_action=feedback.user_action,
-            notes=feedback.engineer_notes
-        )
-    except Exception as e:
-        print(f"Error publishing feedback-submitted event: {e}")
+    # Trigger async feedback loops processing if target is vectorized
+    if feedback.target_id is not None:
+        try:
+            publish_feedback_submitted(
+                job_id=feedback.job_id,
+                target_id=feedback.target_id,
+                user_action=feedback.user_action,
+                notes=feedback.engineer_notes
+            )
+        except Exception as e:
+            print(f"Error publishing feedback-submitted event: {e}")
 
     return feedback
+

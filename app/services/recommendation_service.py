@@ -45,7 +45,8 @@ def extract_deterministic_findings(validation_report: dict | None, drift_report:
 async def generate_schema_recommendations(
     findings: dict,
     target_catalog: TargetCatalog,
-    partitioning_rec: str | None
+    partitioning_rec: str | None,
+    feedback_str: str | None = None
 ) -> SchemaRecommendationOutput:
     """
     Calls the LLM provider to enrich the deterministic findings into sequenced recommendations.
@@ -60,6 +61,8 @@ async def generate_schema_recommendations(
     findings_str = json.dumps(findings, indent=2)
     partitioning_rec_str = partitioning_rec or "None"
     
+    feedback_context = f"\n6. Human Engineering Feedback Guidelines:\n{feedback_str}" if feedback_str else ""
+    
     prompt = f"""You are an expert database administrator and data engineer.
 Your task is to analyze schema validation and drift findings between a source dataset and a target data store, and generate a sequence of recommended alignment operations.
 
@@ -69,7 +72,7 @@ INPUT CONTEXT:
 2. Target Type: {target_type}
 3. Target Schema: {target_schema_str}
 4. Deterministic Findings: {findings_str}
-5. Prior Partitioning Recommendation: {partitioning_rec_str}
+5. Prior Partitioning Recommendation: {partitioning_rec_str}{feedback_context}
 
 ---
 CRITICAL RULES & CONSTRAINTS:

@@ -1,6 +1,6 @@
 from datetime import datetime
 from sqlalchemy import String, DateTime, func, text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -23,6 +23,13 @@ class NotificationRecipient(Base):
     is_active: Mapped[bool] = mapped_column(
         server_default=text("true"),
         default=True
+    )
+
+    subscribed_topics: Mapped[list[str]] = mapped_column(
+        ARRAY(String),
+        nullable=False,
+        server_default=text("'{}'::character varying[]"),
+        default=list
     )
 
     created_at: Mapped[datetime] = mapped_column(

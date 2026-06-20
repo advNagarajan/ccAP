@@ -20,11 +20,34 @@ class SmtpNotificationChannel(BaseNotificationChannel):
         db: Session,
         details: dict = None
     ) -> None:
-        # 1. Fetch active recipients dynamically from the metadata database
-        recipients = db.execute(
-            select(NotificationRecipient.email)
-            .where(NotificationRecipient.is_active == True)
-        ).scalars().all()
+        # 1. Fetch active recipients dynamically from the metadata database, filtered by topic
+        topic = (details or {}).get("topic")
+        is_sqlite = db.bind is not None and db.bind.dialect.name == "sqlite"
+
+        if is_sqlite:
+            # Standalone/test databases (like SQLite) don't support Postgres ARRAY operations
+            query_res = db.execute(
+                select(NotificationRecipient.email, NotificationRecipient.subscribed_topics)
+                .where(NotificationRecipient.is_active == True)
+            ).all()
+            if topic:
+                recipients = [row[0] for row in query_res if topic in row[1]]
+            else:
+                recipients = [row[0] for row in query_res]
+        else:
+            if topic:
+                recipients = db.execute(
+                    select(NotificationRecipient.email)
+                    .where(
+                        NotificationRecipient.is_active == True,
+                        NotificationRecipient.subscribed_topics.any(topic)
+                    )
+                ).scalars().all()
+            else:
+                recipients = db.execute(
+                    select(NotificationRecipient.email)
+                    .where(NotificationRecipient.is_active == True)
+                ).scalars().all()
 
         if not recipients:
             logger.warning(
@@ -76,4 +99,4 @@ class SmtpNotificationChannel(BaseNotificationChannel):
             logger.info(f"Successfully sent email notification '{subject}' to {recipients}")
         except Exception as e:
             logger.error(f"Failed to send email notification '{subject}' via SMTP: {e}")
-            # Do not raise to prevent crashing worker, but log error
+            raise

@@ -138,7 +138,11 @@ def test_sync_metadata_vector_processor():
             source_embedding=None
         )
         
-        mock_db.get.return_value = profile
+        def mock_get_side_effect(model_class, ident):
+            if model_class == MetadataProfile:
+                return profile
+            return None
+        mock_db.get.side_effect = mock_get_side_effect
         mock_vector = [0.123] * 768
         
         with patch("workers.vectorizers.metadata_vectorizer.processor.get_vector_embedding", new_callable=AsyncMock) as mock_embed, \

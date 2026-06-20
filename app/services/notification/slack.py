@@ -1,4 +1,5 @@
 import logging
+import httpx
 from sqlalchemy.orm import Session
 from app.services.notification.base import BaseNotificationChannel
 from app.core.settings import settings
@@ -23,7 +24,7 @@ class SlackNotificationChannel(BaseNotificationChannel):
             return
 
         logger.info(
-            f"[STUB] Slack Notification would post to Webhook: '{subject}' -> {message}"
+            f"Posting Slack Notification: '{subject}'"
         )
-        # In the future, this would perform:
-        # httpx.post(webhook_url, json={"text": f"*{subject}*\n{message}"})
+        response = httpx.post(webhook_url, json={"text": f"*{subject}*\n{message}"})
+        response.raise_for_status()

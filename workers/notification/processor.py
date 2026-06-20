@@ -12,6 +12,7 @@ def process_notification(topic: str, payload: dict, db: Session) -> None:
     """
     job_id = payload.get("job_id")
     source_id = payload.get("source_id")
+    payload["topic"] = topic
 
     subject = f"System Event: {topic.upper()}"
     message = f"Job ID: {job_id}\nSource ID: {source_id}\n"

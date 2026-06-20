@@ -3,7 +3,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-
 class Settings(BaseSettings):
     # Metadata DB
     DB_HOST: str
@@ -28,11 +27,7 @@ class Settings(BaseSettings):
     PUBSUB_TOPIC_JOB_COMPLETED: str
     PUBSUB_TOPIC_JOB_FAILED: str
     PUBSUB_TOPIC_FALLBACK_LANDING_CREATED: str
-    PUBSUB_TOPIC_DEAD_LETTER: str = "job-failures-dead-letter-topic"
-
-    RETRY_DELAY_INFRA_ERROR: int = 1800
-    RETRY_DELAY_TRANSIENT_ERROR_1: int = 10
-    RETRY_DELAY_TRANSIENT_ERROR_2: int = 30
+    PUBSUB_TOPIC_DEAD_LETTER: str
 
     PUBSUB_SUBSCRIPTION_INGESTION_REQUESTED: str
     PUBSUB_SUBSCRIPTION_DATASET_RECEIVED: str
@@ -48,7 +43,7 @@ class Settings(BaseSettings):
     PUBSUB_SUBSCRIPTION_JOB_COMPLETED: str | None = None
     PUBSUB_SUBSCRIPTION_JOB_FAILED: str | None = None
     PUBSUB_SUBSCRIPTION_FALLBACK_LANDING_CREATED: str | None = None
-    PUBSUB_SUBSCRIPTION_DEAD_LETTER: str = "job-failures-dead-letter-sub"
+    PUBSUB_SUBSCRIPTION_DEAD_LETTER: str
 
     # Notification Channels (Slack & SMTP)
     SLACK_WEBHOOK_URL: str | None = None
@@ -63,6 +58,12 @@ class Settings(BaseSettings):
     VALIDATION_WARNING_THRESHOLD: float = 1.0
     DRIFT_WARNING_THRESHOLD: float = 20.0
     DRIFT_CRITICAL_THRESHOLD: float = 50.0
+    TARGET_INFERENCE_TOP_K: int = 7
+
+    # Retry Thresholds
+    RETRY_DELAY_INFRA_ERROR: int
+    RETRY_DELAY_TRANSIENT_ERROR_1: int
+    RETRY_DELAY_TRANSIENT_ERROR_2: int
 
     # Vertex AI
     GCP_LOCATION: str = "us-central1"
@@ -73,6 +74,5 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         extra="ignore"
     )
-
 
 settings = Settings()

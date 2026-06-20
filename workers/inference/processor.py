@@ -9,6 +9,9 @@ from app.core.settings import settings
 from app.models.db.metadata_profile import MetadataProfile
 from app.models.db.target_catalog import TargetCatalog
 from app.models.db.landing_inference import LandingInference
+from app.models.db.job import Job
+from app.models.db.source import Source
+from app.models.db.processing_configuration import ProcessingConfiguration
 from app.models.domain.inference_schema import InferenceResponseSchema
 from app.services.metadata_service import (
     generate_llm_optimized_json,
@@ -41,7 +44,20 @@ async def infer_target_landing_zone(
         logger.error(f"MetadataProfile record not found: {profile_uuid}")
         return
 
-    if profile.source_embedding is None:
+    predefined_ids = []
+    job = db.get(Job, job_uuid)
+    if job:
+        source = db.get(Source, job.source_id)
+        if source:
+            config = db.get(ProcessingConfiguration, source.config_id)
+            if config and isinstance(config.config_content, dict):
+                p_ids = config.config_content.get("predefined_target_ids")
+                if isinstance(p_ids, list):
+                    predefined_ids = p_ids
+
+    is_predefined = (1 <= len(predefined_ids) <= settings.TARGET_INFERENCE_TOP_K)
+
+    if not is_predefined and profile.source_embedding is None:
         logger.error(f"MetadataProfile has no embedding vectorized yet: {profile_uuid}")
         return
 
@@ -49,17 +65,37 @@ async def infer_target_landing_zone(
     stage = start_stage(job_uuid, "Target Inference", db)
 
     try:
-        # 2. Retrieve Top 7 Candidates using pgvector cosine similarity
-        distance_expr = TargetCatalog.target_embedding.cosine_distance(profile.source_embedding)
-        stmt = (
-            select(TargetCatalog, (1.0 - distance_expr).label("similarity"))
-            .where(TargetCatalog.target_embedding.is_not(None))
-            .order_by(distance_expr)
-            .limit(7)
-        )
-        
-        results = db.execute(stmt).all()
-        logger.info(f"Retrieved {len(results)} candidate targets from TargetCatalog.")
+        results = []
+        predefined_single = False
+        if is_predefined:
+            target_uuids = []
+            for tid in predefined_ids:
+                try:
+                    target_uuids.append(UUID(str(tid)))
+                except ValueError:
+                    pass
+            stmt = select(TargetCatalog).where(TargetCatalog.target_id.in_(target_uuids))
+            db_targets = db.execute(stmt).scalars().all()
+            if db_targets:
+                results = [(t, 1.0) for t in db_targets]
+                if len(db_targets) == 1:
+                    predefined_single = True
+                logger.info(f"Using {len(results)} predefined target candidates.")
+            else:
+                logger.warning("Predefined target IDs provided but none found in database. Falling back to semantic search.")
+
+        if not results:
+            if profile.source_embedding is None:
+                raise ValueError("Cannot perform semantic search: source embedding is missing.")
+            distance_expr = TargetCatalog.target_embedding.cosine_distance(profile.source_embedding)
+            stmt = (
+                select(TargetCatalog, (1.0 - distance_expr).label("similarity"))
+                .where(TargetCatalog.target_embedding.is_not(None))
+                .order_by(distance_expr)
+                .limit(settings.TARGET_INFERENCE_TOP_K)
+            )
+            results = db.execute(stmt).all()
+            logger.info(f"Retrieved {len(results)} candidate targets from TargetCatalog via semantic search.")
 
         # 3. Format context for prompt
         source_json = generate_llm_optimized_json(profile.metadata_json)
@@ -130,6 +166,9 @@ async def infer_target_landing_zone(
         # Parse output
         res_json = json.loads(response_text)
         confidence = float(res_json.get("confidence_score", 0.0))
+        if predefined_single:
+            logger.info("Single predefined target candidate used. Overriding confidence to 1.0.")
+            confidence = 1.0
         selected_target_id_str = res_json.get("selected_target_id")
         reasoning = res_json.get("reasoning", "No reasoning provided.")
         column_mapping = res_json.get("column_mapping")
@@ -139,6 +178,8 @@ async def infer_target_landing_zone(
         naming_suggestions = res_json.get("naming_convention_suggestions")
         
         requires_review = confidence < settings.INFERENCE_CONFIDENCE_THRESHOLD
+        if predefined_single:
+            requires_review = False
         
         target_uuid = UUID(selected_target_id_str) if selected_target_id_str else None
         

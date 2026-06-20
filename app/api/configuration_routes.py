@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 
 from app.models.db.processing_configuration import ProcessingConfiguration
+from app.models.db.target_catalog import TargetCatalog
 
 from app.schemas.configuration import (
     ConfigurationCreateResponse,
@@ -48,6 +49,33 @@ VALID_STATUSES = {
     "INACTIVE",
     "DELETED"
 }
+
+
+def validate_predefined_targets(config_content: dict, db: Session):
+    predefined_target_ids = config_content.get("predefined_target_ids")
+    if predefined_target_ids is not None:
+        if not isinstance(predefined_target_ids, list):
+            raise HTTPException(
+                status_code=400,
+                detail="predefined_target_ids must be a list"
+            )
+        missing_ids = []
+        for tid in predefined_target_ids:
+            try:
+                target_uuid = UUID(str(tid))
+            except ValueError:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid UUID format: {tid}"
+                )
+            target_exists = db.get(TargetCatalog, target_uuid)
+            if not target_exists:
+                missing_ids.append(str(tid))
+        if missing_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Predefined target ID(s) {', '.join(missing_ids)} do not exist in Target Catalog."
+            )
 
 
 @router.post("/configurations", response_model=ConfigurationCreateResponse, status_code=201)
@@ -114,6 +142,8 @@ async def create_configuration(file: UploadFile = File(...), db: Session = Depen
     config_content.pop("config_type", None)
 
     config_content.pop("config_subtype", None)
+
+    validate_predefined_targets(config_content, db)
 
     configuration = ProcessingConfiguration(
         name=file.filename,
@@ -187,6 +217,9 @@ def update_configuration(config_id: UUID, payload: ConfigurationUpdate, db: Sess
         )
 
     updates = payload.model_dump(exclude_unset=True)
+
+    if "config_content" in updates and updates["config_content"] is not None:
+        validate_predefined_targets(updates["config_content"], db)
 
     if (
         "status" in updates

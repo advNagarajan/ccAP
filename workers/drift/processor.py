@@ -9,6 +9,8 @@ from app.models.db.schema_validation import SchemaValidation
 from app.models.db.schema_drift import SchemaDrift
 from app.models.db.schema_fallback_request import SchemaFallbackRequest
 from app.models.db.job import Job
+from app.models.db.source import Source
+from app.models.db.processing_configuration import ProcessingConfiguration
 from app.services.job_stage_service import start_stage, complete_stage, fail_stage
 from app.pubsub.publisher import publish_drift_detected
 from app.services.drift_service import compute_schema_drift
@@ -117,13 +119,28 @@ def process_schema_drift(
         if target is None:
             raise ValueError(f"TargetCatalog not found: {val_record.target_id}")
 
+        warning_threshold = settings.DRIFT_WARNING_THRESHOLD
+        critical_threshold = settings.DRIFT_CRITICAL_THRESHOLD
+        job_obj = db.get(Job, job_uuid)
+        if job_obj:
+            source = db.get(Source, job_obj.source_id)
+            if source:
+                config = db.get(ProcessingConfiguration, source.config_id)
+                if config and isinstance(config.config_content, dict):
+                    d_thresholds = config.config_content.get("drift_thresholds")
+                    if isinstance(d_thresholds, dict):
+                        if "warning_threshold" in d_thresholds:
+                            warning_threshold = float(d_thresholds["warning_threshold"])
+                        if "critical_threshold" in d_thresholds:
+                            critical_threshold = float(d_thresholds["critical_threshold"])
+
         # Run drift computation
         drift_results = compute_schema_drift(
             metadata_json=profile.metadata_json,
             schema_definition=target.schema_definition or {},
             column_mapping=inference.column_mapping or {},
-            warning_threshold=settings.DRIFT_WARNING_THRESHOLD,
-            critical_threshold=settings.DRIFT_CRITICAL_THRESHOLD
+            warning_threshold=warning_threshold,
+            critical_threshold=critical_threshold
         )
 
         drift_status = drift_results["drift_status"]

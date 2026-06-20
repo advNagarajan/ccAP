@@ -8,6 +8,8 @@ from app.models.db.landing_inference import LandingInference
 from app.models.db.schema_validation import SchemaValidation
 from app.models.db.schema_fallback_request import SchemaFallbackRequest
 from app.models.db.job import Job
+from app.models.db.source import Source
+from app.models.db.processing_configuration import ProcessingConfiguration
 from app.services.job_stage_service import start_stage, complete_stage, fail_stage
 from app.pubsub.publisher import publish_schema_validated
 from app.services.validation_service import compute_schema_validation
@@ -150,6 +152,17 @@ def process_schema_validation(
         if target is None:
             raise ValueError(f"TargetCatalog table not found: {inference.target_id}")
 
+        warning_threshold = settings.VALIDATION_WARNING_THRESHOLD
+        job_obj = db.get(Job, job_uuid)
+        if job_obj:
+            source = db.get(Source, job_obj.source_id)
+            if source:
+                config = db.get(ProcessingConfiguration, source.config_id)
+                if config and isinstance(config.config_content, dict):
+                    v_thresholds = config.config_content.get("validation_thresholds")
+                    if isinstance(v_thresholds, dict) and "warning_threshold" in v_thresholds:
+                        warning_threshold = float(v_thresholds["warning_threshold"])
+
         # Core logic execution
         results = compute_schema_validation(
             metadata_json=profile.metadata_json,
@@ -157,7 +170,7 @@ def process_schema_validation(
             column_mapping=inference.column_mapping or {},
             unmapped_source_columns=inference.unmapped_source_columns or [],
             missing_target_columns=inference.missing_target_columns or [],
-            warning_threshold=settings.VALIDATION_WARNING_THRESHOLD
+            warning_threshold=warning_threshold
         )
 
         if val_record:

@@ -3,6 +3,10 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.models.db.metadata_profile import MetadataProfile
+from app.models.db.job import Job
+from app.models.db.source import Source
+from app.models.db.processing_configuration import ProcessingConfiguration
+from app.core.settings import settings
 from app.services.passport_service import get_vector_embedding
 from app.services.metadata_service import generate_embedding_optimized_text
 from app.pubsub.publisher import publish_metadata_vectorized
@@ -33,6 +37,29 @@ async def sync_metadata_vector(
     vector_stage = start_stage(job_uuid, "Metadata Vectorization", db)
 
     try:
+        skip_vectorization = False
+        job = db.get(Job, job_uuid)
+        if job:
+            source = db.get(Source, job.source_id)
+            if source:
+                config = db.get(ProcessingConfiguration, source.config_id)
+                if config and isinstance(config.config_content, dict):
+                    predefined_ids = config.config_content.get("predefined_target_ids")
+                    if isinstance(predefined_ids, list) and 1 <= len(predefined_ids) <= settings.TARGET_INFERENCE_TOP_K:
+                        skip_vectorization = True
+
+        if skip_vectorization:
+            logger.info(f"Skipping vector embedding generation because predefined_target_ids contains {len(predefined_ids)} items.")
+            logger.info(f"Publishing metadata-vectorized event directly for job_id={job_id}, artifact_id={artifact_id}")
+            publish_metadata_vectorized(
+                job_id=job_id,
+                artifact_id=artifact_id,
+                metadata_profile_id=metadata_profile_id
+            )
+            complete_stage(vector_stage.stage_history_id, db, details={"status": "SKIPPED", "reason": "predefined_target_ids within bounds"})
+            logger.info(f"Successfully skipped metadata vector sync for metadata_profile_id={profile_uuid}.")
+            return
+
         # Fallback check if embedding_optimized_text was not computed during ingestion stage
         if not profile.embedding_optimized_text:
             logger.warning(f"embedding_optimized_text missing for profile={profile_uuid}. Generating it now.")

@@ -9,6 +9,7 @@ from app.core.settings import settings
 from app.models.db.metadata_profile import MetadataProfile
 from app.models.db.target_catalog import TargetCatalog
 from app.models.db.landing_inference import LandingInference
+from app.models.db.llm_feedback_loop import LlmFeedbackLoop
 from app.models.db.job import Job
 from app.models.db.source import Source
 from app.models.db.processing_configuration import ProcessingConfiguration
@@ -115,6 +116,26 @@ async def infer_target_landing_zone(
             )
 
         candidates_str = "\n".join(candidates_context)
+
+        # Query database for stage-specific feedback
+        feedback_records = db.scalars(
+            select(LlmFeedbackLoop)
+            .where(
+                (LlmFeedbackLoop.job_id == job_uuid) &
+                (LlmFeedbackLoop.stage.ilike("%inference%"))
+            )
+            .order_by(LlmFeedbackLoop.created_at.asc())
+        ).all()
+
+        feedback_prompt_part = ""
+        if feedback_records:
+            feedback_lines = [
+                f"- {record.engineer_notes}"
+                for record in feedback_records
+                if record.engineer_notes
+            ]
+            if feedback_lines:
+                feedback_prompt_part = "\n\nHuman Engineering Feedback Guidelines:\n" + "\n".join(feedback_lines)
         
         prompt = (
             "Analyze the incoming source dataset's metadata schema and determine "
@@ -122,8 +143,10 @@ async def infer_target_landing_zone(
             "Incoming Source Dataset Schema:\n"
             f"{json.dumps(source_json, indent=2)}\n\n"
             "Candidate Target Databases (Top 7 Retrieved via Semantic Search):\n"
-            f"{candidates_str}\n\n"
+            f"{candidates_str}"
+            f"{feedback_prompt_part}\n\n"
             "Instructions:\n"
+
             "1. Evaluate candidates using the following priority order:\n"
             "   - Business meaning and semantic purpose of the dataset.\n"
             "   - Column name alignment.\n"

@@ -9,6 +9,7 @@ from app.models.db.schema_validation import SchemaValidation
 from app.models.db.landing_inference import LandingInference
 from app.models.db.target_catalog import TargetCatalog
 from app.models.db.schema_recommendation import SchemaRecommendation
+from app.models.db.llm_feedback_loop import LlmFeedbackLoop
 from app.services.job_stage_service import start_stage, complete_stage, fail_stage
 from app.services.recommendation_service import extract_deterministic_findings, generate_schema_recommendations
 from app.pubsub.publisher import publish_job_completed
@@ -122,9 +123,35 @@ async def process_schema_recommendation(
         # 1. Generate deterministic findings
         findings = extract_deterministic_findings(val_record.report_json, drift_record.drift_summary)
 
+        # Query database for stage-specific feedback
+        feedback_records = db.scalars(
+            select(LlmFeedbackLoop)
+            .where(
+                (LlmFeedbackLoop.job_id == job_uuid) &
+                (LlmFeedbackLoop.stage.ilike("%recommendation%"))
+            )
+            .order_by(LlmFeedbackLoop.created_at.asc())
+        ).all()
+
+        feedback_str = ""
+        if feedback_records:
+            feedback_lines = [
+                f"- {record.engineer_notes}"
+                for record in feedback_records
+                if record.engineer_notes
+            ]
+            if feedback_lines:
+                feedback_str = "\n".join(feedback_lines)
+
         # 2. Invoke LLM recommendation service
         partitioning_rec = inference.partitioning_recommendation
-        llm_output = await generate_schema_recommendations(findings, target, partitioning_rec)
+        llm_output = await generate_schema_recommendations(
+            findings,
+            target,
+            partitioning_rec,
+            feedback_str=feedback_str
+        )
+
 
         recommendations_data = [rec.model_dump() for rec in llm_output.recommendations]
 

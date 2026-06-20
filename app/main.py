@@ -7,6 +7,7 @@ from app.api.target_routes import router as target_router
 from app.api.feedback_routes import router as feedback_router
 from app.api.fallback_routes import router as fallback_router
 from app.api.recipient_routes import router as recipient_router
+from app.api.auth_routes import router as auth_router
 
 app = FastAPI(
     title = "Smart Data Landing and Schema Intelligence Platform",
@@ -27,3 +28,4 @@ app.include_router(target_router)
 app.include_router(feedback_router)
 app.include_router(fallback_router)
 app.include_router(recipient_router)
+app.include_router(auth_router)

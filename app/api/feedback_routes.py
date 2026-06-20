@@ -8,6 +8,9 @@ from app.models.db.llm_feedback_loop import LlmFeedbackLoop
 from app.schemas.feedback import FeedbackCreate, FeedbackResponse
 from app.pubsub.publisher import publish_feedback_submitted
 
+from app.api.dependencies import get_current_user
+from app.models.db.user import User
+
 router = APIRouter(tags=["Feedback"])
 
 
@@ -18,7 +21,8 @@ router = APIRouter(tags=["Feedback"])
 )
 def submit_feedback(
     payload: FeedbackCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     if payload.target_id is not None:
         target = db.get(TargetCatalog, payload.target_id)
@@ -36,7 +40,7 @@ def submit_feedback(
         engineer_notes=payload.engineer_notes,
         stage=payload.stage,
         response_in_question=payload.response_in_question,
-        user_id=payload.user_id
+        user_id=current_user.user_id
     )
 
     db.add(feedback)

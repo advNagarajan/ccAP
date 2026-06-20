@@ -71,6 +71,9 @@ class Settings(BaseSettings):
     VERTEX_EMBEDDING_MODEL: str | None = None
     VERTEX_GENERATIVE_MODEL: str | None = None
 
+    # Dev mode
+    DEV_MODE: bool = True
+
     model_config = SettingsConfigDict(
         extra="ignore"
     )

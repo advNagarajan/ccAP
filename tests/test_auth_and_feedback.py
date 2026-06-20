@@ -42,6 +42,15 @@ def mock_add(instance):
 
 mock_db.add = mock_add
 
+def mock_get(model_class, ident):
+    if model_class == User:
+        if isinstance(ident, str):
+            ident = uuid.UUID(ident)
+        return mock_users_db.get(ident)
+    return None
+
+mock_db.get = mock_get
+
 def mock_execute(statement):
     result_mock = MagicMock()
     stmt_str = str(statement).lower()
@@ -106,26 +115,68 @@ def test_auth_and_stage_feedback():
     print("PASS: Registration & Login completed successfully.")
 
     print("\n" + "=" * 60)
-    print("TEST 2 - SUBMIT STAGE-SPECIFIC FEEDBACK")
+    print("TEST 2 - SUBMIT STAGE-SPECIFIC FEEDBACK (AUTH REQUIRED)")
     print("=" * 60)
 
+    from app.core.settings import settings
+    
+    # 1. Disable DEV_MODE to enforce strict auth
+    settings.DEV_MODE = False
+    
     job_id = str(uuid.uuid4())
-    feedback_response = client.post(
+    
+    # Send request without Auth headers - should fail with 401
+    fail_response = client.post(
         "/feedback",
         json={
             "job_id": job_id,
             "stage": "inference",
             "response_in_question": "Selected target was raw_events",
-            "engineer_notes": "Do not select raw_events for transaction data. Route to ledger.",
-            "user_id": user_id
+            "engineer_notes": "Do not select raw_events for transaction data. Route to ledger."
         }
     )
-    assert feedback_response.status_code == 201
-    fb_data = feedback_response.json()
+    assert fail_response.status_code == 401
+    print("PASS: Request without token rejected with 401.")
+
+    # Send request with Bearer Auth headers - should succeed
+    success_response = client.post(
+        "/feedback",
+        json={
+            "job_id": job_id,
+            "stage": "inference",
+            "response_in_question": "Selected target was raw_events",
+            "engineer_notes": "Do not select raw_events for transaction data. Route to ledger."
+        },
+        headers={
+            "Authorization": f"Bearer {token_data['access_token']}"
+        }
+    )
+    assert success_response.status_code == 201
+    fb_data = success_response.json()
     assert fb_data["stage"] == "inference"
     assert fb_data["user_id"] == user_id
     assert fb_data["target_id"] is None
-    print("PASS: Stage-specific feedback successfully saved.")
+    print("PASS: Request with token authenticated successfully.")
+
+    # 2. Re-enable DEV_MODE to test dev mode fallback
+    settings.DEV_MODE = True
+    
+    dev_response = client.post(
+        "/feedback",
+        json={
+            "job_id": job_id,
+            "stage": "recommendation",
+            "response_in_question": "suggested columns",
+            "engineer_notes": "dev mode notes"
+        }
+    )
+    assert dev_response.status_code == 201
+    dev_fb_data = dev_response.json()
+    assert dev_fb_data["stage"] == "recommendation"
+    # User ID will match the generated mock dev user UUID
+    assert dev_fb_data["user_id"] is not None
+    print("PASS: Request without token succeeded via DEV_MODE fallback.")
+
 
 
 @pytest.mark.anyio

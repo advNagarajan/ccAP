@@ -126,3 +126,40 @@ def test_subscriber_message_routing_completed():
         
         process_notification("job-completed", payload, mock_db)
         mock_smtp.assert_called_once()
+
+
+@patch("app.services.notification.slack.httpx.post")
+def test_slack_webhook_routing(mock_post):
+    mock_db = MagicMock()
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status = MagicMock()
+    mock_post.return_value = mock_resp
+
+    with patch("app.services.notification.slack.settings") as mock_settings:
+        mock_settings.SLACK_WEBHOOK_URL = "https://default-webhook"
+        mock_settings.SLACK_WEBHOOK_DEAD_LETTER = "https://dlq-webhook"
+        mock_settings.SLACK_WEBHOOK_JOB_FAILED = "https://failed-webhook"
+        mock_settings.SLACK_WEBHOOK_JOB_COMPLETED = "https://completed-webhook"
+        mock_settings.SLACK_WEBHOOK_NEW_TABLE = "https://new-table-webhook"
+
+        channel = SlackNotificationChannel()
+
+        # 1. Dead Letter
+        channel.send_message("DLQ", "Message", mock_db, details={"topic": "dead-letter"})
+        mock_post.assert_called_with("https://dlq-webhook", json={"text": "*DLQ*\nMessage"})
+
+        # 2. Job Failed
+        channel.send_message("Failed", "Message", mock_db, details={"topic": "job-failed"})
+        mock_post.assert_called_with("https://failed-webhook", json={"text": "*Failed*\nMessage"})
+
+        # 3. Job Completed
+        channel.send_message("Completed", "Message", mock_db, details={"topic": "job-completed"})
+        mock_post.assert_called_with("https://completed-webhook", json={"text": "*Completed*\nMessage"})
+
+        # 4. Fallback requested / New table
+        channel.send_message("New Table", "Message", mock_db, details={"topic": "fallback-requested"})
+        mock_post.assert_called_with("https://new-table-webhook", json={"text": "*New Table*\nMessage"})
+
+        # 5. Default fallback
+        channel.send_message("Generic", "Message", mock_db, details={"topic": "unknown-topic"})
+        mock_post.assert_called_with("https://default-webhook", json={"text": "*Generic*\nMessage"})

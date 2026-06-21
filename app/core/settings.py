@@ -49,6 +49,10 @@ class Settings(BaseSettings):
 
     # Notification Channels (Slack & SMTP)
     SLACK_WEBHOOK_URL: str | None = None
+    SLACK_WEBHOOK_NEW_TABLE: str | None = None
+    SLACK_WEBHOOK_JOB_COMPLETED: str | None = None
+    SLACK_WEBHOOK_JOB_FAILED: str | None = None
+    SLACK_WEBHOOK_DEAD_LETTER: str | None = None
     SMTP_HOST: str | None = None
     SMTP_PORT: int | None = None
     SMTP_USER: str | None = None

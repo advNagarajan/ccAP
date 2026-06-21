@@ -12,7 +12,7 @@ from app.models.db.job import Job
 from app.models.db.source import Source
 from app.models.db.processing_configuration import ProcessingConfiguration
 from app.services.job_stage_service import start_stage, complete_stage, fail_stage
-from app.pubsub.publisher import publish_drift_detected
+from app.pubsub.publisher import publish_drift_detected, publish_fallback_requested
 from app.services.drift_service import compute_schema_drift
 from app.core.settings import settings
 
@@ -199,6 +199,15 @@ def process_schema_drift(
             if job:
                 job.status = "PENDING_REVIEW"
             db.commit()
+
+            # Publish fallback requested event
+            source_id = job.source_id if job else None
+            publish_fallback_requested(
+                job_id=job_id,
+                source_id=source_id,
+                request_id=fallback_req.request_id,
+                request_reason="CRITICAL_DRIFT"
+            )
 
         # Update stage history
         complete_stage(

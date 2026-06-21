@@ -11,7 +11,7 @@ from app.models.db.job import Job
 from app.models.db.source import Source
 from app.models.db.processing_configuration import ProcessingConfiguration
 from app.services.job_stage_service import start_stage, complete_stage, fail_stage
-from app.pubsub.publisher import publish_schema_validated
+from app.pubsub.publisher import publish_schema_validated, publish_fallback_requested
 from app.services.validation_service import compute_schema_validation
 from app.core.settings import settings
 
@@ -128,6 +128,15 @@ def process_schema_validation(
 
             db.commit()
 
+            # Publish fallback requested event
+            source_id = job.source_id if job else None
+            publish_fallback_requested(
+                job_id=job_id,
+                source_id=source_id,
+                request_id=fallback_req.request_id,
+                request_reason="TARGET_NOT_FOUND"
+            )
+
             complete_stage(
                 stage.stage_history_id,
                 db,
@@ -225,6 +234,15 @@ def process_schema_validation(
                 job.status = "PENDING_REVIEW"
 
             db.commit()
+
+            # Publish fallback requested event
+            source_id = job.source_id if job else None
+            publish_fallback_requested(
+                job_id=job_id,
+                source_id=source_id,
+                request_id=fallback_req.request_id,
+                request_reason="VALIDATION_FAILED"
+            )
 
         # Log compact audit stage
         issue_count = len(results["report_json"]["invalid_mappings"]) + len(results["report_json"]["datatype_issues"])

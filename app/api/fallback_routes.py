@@ -22,7 +22,22 @@ def list_fallback_requests(
 ):
     stmt = select(SchemaFallbackRequest).where(SchemaFallbackRequest.request_status == status).order_by(SchemaFallbackRequest.created_at.desc())
     results = db.execute(stmt).scalars().all()
-    return results
+    
+    from app.services.backup_table_service import generate_ddl_for_request
+    response_list = []
+    for req in results:
+        ddl = None
+        if req.request_status == "PENDING":
+            try:
+                ddl = generate_ddl_for_request(req, db)
+            except Exception:
+                pass
+        
+        resp = FallbackResponse.model_validate(req)
+        resp.generated_ddl = ddl
+        response_list.append(resp)
+        
+    return response_list
 
 
 @router.post(
@@ -39,7 +54,8 @@ def approve_fallback_request(
             request_id=request_id,
             approved_by=payload.approved_by,
             review_notes=payload.review_notes,
-            db=db
+            db=db,
+            connection_details=payload.connection_details
         )
         return {
             "message": "Backup table created successfully",

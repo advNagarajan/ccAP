@@ -48,6 +48,12 @@ def process_notification(topic: str, payload: dict, db: Session) -> None:
         subject = "Notice: Fallback Landing Schema Created"
         backup_table = payload.get("backup_table_name")
         message += f"Drift validation fallback table created: {backup_table}"
+    elif topic == "fallback-requested":
+        subject = "Action Required: Fallback Request Created"
+        reason = payload.get("request_reason")
+        req_id = payload.get("request_id")
+        message += f"Threshold failure detected ({reason}). A fallback table proposal has been generated.\n"
+        message += f"Please review and approve/reject fallback request ID: {req_id}"
 
     for channel in NOTIFICATION_CHANNELS:
         max_attempts = 3

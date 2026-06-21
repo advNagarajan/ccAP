@@ -232,3 +232,22 @@ def publish_fallback_landing_created(
         settings.PUBSUB_TOPIC_FALLBACK_LANDING_CREATED,
         payload
     )
+
+
+def publish_fallback_requested(
+    job_id,
+    source_id,
+    request_id,
+    request_reason
+):
+    payload = {
+        "job_id": str(job_id),
+        "source_id": str(source_id),
+        "request_id": str(request_id),
+        "request_reason": str(request_reason)
+    }
+
+    return publish_event(
+        settings.PUBSUB_TOPIC_FALLBACK_REQUESTED,
+        payload
+    )

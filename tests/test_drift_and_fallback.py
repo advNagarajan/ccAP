@@ -93,7 +93,8 @@ def test_compute_schema_drift_datatype_normalization():
 @patch("workers.validation.processor.start_stage")
 @patch("workers.validation.processor.complete_stage")
 @patch("workers.validation.processor.publish_schema_validated")
-def test_validation_skipped_creates_fallback_request(mock_publish, mock_complete, mock_start):
+@patch("workers.validation.processor.publish_fallback_requested")
+def test_validation_skipped_creates_fallback_request(mock_pub_fallback, mock_publish, mock_complete, mock_start):
     db = MagicMock()
     db.execute.return_value.scalar_one_or_none.return_value = None
     job_id = str(uuid.uuid4())
@@ -153,7 +154,8 @@ def test_validation_skipped_creates_fallback_request(mock_publish, mock_complete
 @patch("workers.drift.processor.start_stage")
 @patch("workers.drift.processor.complete_stage")
 @patch("workers.drift.processor.publish_drift_detected")
-def test_critical_drift_creates_fallback_request(mock_publish, mock_complete, mock_start):
+@patch("workers.drift.processor.publish_fallback_requested")
+def test_critical_drift_creates_fallback_request(mock_pub_fallback, mock_publish, mock_complete, mock_start):
     db = MagicMock()
     db.execute.return_value.scalar_one_or_none.return_value = None
     job_id = str(uuid.uuid4())
@@ -249,8 +251,11 @@ def test_critical_drift_creates_fallback_request(mock_publish, mock_complete, mo
 # 3. APPROVAL FLOW, REJECTION, & IDEMPOTENCY
 # ==========================================
 
+# ==========================================
+
 @patch("app.services.backup_table_service.publish_fallback_landing_created")
-def test_create_backup_table_success(mock_pub):
+@patch("app.services.backup_table_service.publish_job_completed")
+def test_create_backup_table_success(mock_completed, mock_pub):
     db = MagicMock()
     request_id = uuid.uuid4()
     job_id = uuid.uuid4()
@@ -307,7 +312,7 @@ def test_create_backup_table_success(mock_pub):
     assert request.approved_by == "admin"
     assert request.review_notes == "Approved for landing"
     assert request.backup_table_name.startswith("raw_landing.backup_")
-    assert job.status == "FALLBACK_LANDING_CREATED"
+    assert job.status == "COMPLETED"
 
     ddl_executions = [str(call) for call in exec_calls if "CREATE TABLE" in str(call)]
     assert len(ddl_executions) == 1
@@ -318,6 +323,7 @@ def test_create_backup_table_success(mock_pub):
     assert len(stage_logs) == 1
     assert stage_logs[0].stage_name == "Fallback Landing Created"
     mock_pub.assert_called_once()
+    mock_completed.assert_called_once()
 
 
 def test_create_backup_table_idempotent_error():
@@ -333,7 +339,8 @@ def test_create_backup_table_idempotent_error():
         create_backup_table_for_request(request_id, "admin", "Notes", db)
 
 
-def test_reject_fallback_request_success():
+@patch("app.services.backup_table_service.publish_job_failed")
+def test_reject_fallback_request_success(mock_failed):
     db = MagicMock()
     request_id = uuid.uuid4()
     job_id = uuid.uuid4()
@@ -363,6 +370,81 @@ def test_reject_fallback_request_success():
     assert len(stage_logs) == 1
     assert stage_logs[0].stage_name == "Fallback Request Rejected"
     assert stage_logs[0].status == "FAILED"
+    mock_failed.assert_called_once()
+
+
+def test_map_observed_type_to_sql():
+    from app.services.backup_table_service import map_observed_type_to_sql
+    assert map_observed_type_to_sql(["int"], "postgresql") == "BIGINT"
+    assert map_observed_type_to_sql(["int"], "sqlite") == "INTEGER"
+    assert map_observed_type_to_sql(["dict"], "mysql") == "JSON"
+
+
+@patch("app.services.backup_table_service.publish_fallback_landing_created")
+@patch("app.services.backup_table_service.publish_job_completed")
+@patch("sqlalchemy.create_engine")
+def test_create_backup_table_custom_db(mock_engine, mock_completed, mock_created):
+    db = MagicMock()
+    request_id = uuid.uuid4()
+    job_id = uuid.uuid4()
+    artifact_id = uuid.uuid4()
+
+    request = SchemaFallbackRequest(
+        request_id=request_id,
+        job_id=job_id,
+        artifact_id=artifact_id,
+        request_reason="VALIDATION_FAILED",
+        request_status="PENDING"
+    )
+
+    profile = MetadataProfile(
+        job_id=job_id,
+        artifact_id=artifact_id,
+        metadata_json={
+            "columns": [
+                {"name": "user_id", "observed_types": ["int"]}
+            ]
+        }
+    )
+
+    job = Job(job_id=job_id, status="PENDING_REVIEW", source_id=uuid.uuid4())
+
+    def db_get(model, ident):
+        if model == SchemaFallbackRequest:
+            return request
+        if model == Job:
+            return job
+        return None
+    db.get = db_get
+
+    mock_profile_query = MagicMock()
+    mock_profile_query.scalar_one_or_none.return_value = profile
+    
+    def db_execute(sql_text):
+        if "metadata_profiles" in str(sql_text):
+            return mock_profile_query
+        return MagicMock()
+    db.execute = db_execute
+
+    from app.schemas.fallback import DatabaseConnectionDetails
+    conn_details = DatabaseConnectionDetails(
+        db_type="sqlite",
+        database="test_custom.db",
+        schema_name=None,
+        table_name="custom_table"
+    )
+
+    mock_conn = MagicMock()
+    mock_engine.return_value.connect.return_value.__enter__.return_value = mock_conn
+
+    table_name = create_backup_table_for_request(request_id, "admin", "Notes", db, conn_details)
+
+    assert table_name == "custom_table"
+    assert request.request_status == "APPROVED"
+    assert job.status == "COMPLETED"
+    mock_engine.assert_called_once_with("sqlite:///test_custom.db")
+    exec_calls = [str(call[0][0]) for call in mock_conn.execute.call_args_list]
+    assert any("CREATE TABLE" in c for c in exec_calls)
 
 
 # ==========================================
@@ -416,7 +498,8 @@ def test_route_approve_request(mock_approve):
             request_id=uuid.UUID(request_id),
             approved_by="admin",
             review_notes="Looks good",
-            db=db
+            db=db,
+            connection_details=None
         )
     finally:
         app.dependency_overrides.clear()

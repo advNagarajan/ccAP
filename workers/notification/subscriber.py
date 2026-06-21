@@ -31,6 +31,7 @@ def start_subscriber():
         "job-completed": settings.PUBSUB_SUBSCRIPTION_JOB_COMPLETED,
         "job-failed": settings.PUBSUB_SUBSCRIPTION_JOB_FAILED,
         "fallback-landing-created": settings.PUBSUB_SUBSCRIPTION_FALLBACK_LANDING_CREATED,
+        "fallback-requested": settings.PUBSUB_SUBSCRIPTION_FALLBACK_REQUESTED,
         "dead-letter": settings.PUBSUB_SUBSCRIPTION_DEAD_LETTER
     }
 

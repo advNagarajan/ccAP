@@ -1,4 +1,5 @@
 from google.cloud import storage
+from google.oauth2 import service_account
 
 from app.connectors.base import BaseConnector
 
@@ -14,6 +15,27 @@ from app.core.settings import settings
 
 class GCSConnector(BaseConnector):
 
+    def _get_client(self, connection_details) -> storage.Client:
+        project_id = connection_details.get("project_id")
+        credentials_dict = connection_details.get("credentials_json")
+
+        if not credentials_dict:
+            raise ValueError(
+                "Missing 'credentials_json' in connection details. "
+                "A user service account is required to connect to the external GCS bucket."
+            )
+        if not project_id:
+            raise ValueError(
+                "Missing 'project_id' in connection details. "
+                "A GCP project ID is required to connect to the external GCS bucket."
+            )
+
+        credentials = service_account.Credentials.from_service_account_info(credentials_dict)
+        return storage.Client(
+            project=project_id,
+            credentials=credentials
+        )
+
     def list_artifacts(
         self,
         source
@@ -24,7 +46,7 @@ class GCSConnector(BaseConnector):
         bucket_name = connection_details["bucket"]
         prefix = connection_details["prefix"]
 
-        client = storage.Client(project=settings.GCP_PROJECT_ID)
+        client = self._get_client(connection_details)
 
         blobs = client.list_blobs(
             bucket_name,
@@ -84,9 +106,7 @@ class GCSConnector(BaseConnector):
 
         object_name = artifact.metadata["object_name"]
 
-        client = storage.Client(
-            project=settings.GCP_PROJECT_ID
-        )
+        client = self._get_client(source.connection_details)
 
         bucket = client.bucket(bucket_name)
 
@@ -115,9 +135,7 @@ class GCSConnector(BaseConnector):
 
         object_name = artifact.metadata["object_name"]
 
-        client = storage.Client(
-            project=settings.GCP_PROJECT_ID
-        )
+        client = self._get_client(source.connection_details)
 
         bucket = client.bucket(bucket_name)
 
@@ -148,9 +166,7 @@ class GCSConnector(BaseConnector):
 
         bucket_name = connection_details["bucket"]
 
-        client = storage.Client(
-            project=settings.GCP_PROJECT_ID
-        )
+        client = self._get_client(connection_details)
 
         bucket = client.bucket(bucket_name)
 

@@ -1,4 +1,7 @@
 from pprint import pprint
+from unittest.mock import patch
+from google.cloud import storage
+from app.connectors.gcs_connector import GCSConnector
 
 from app.db.database import SessionLocal
 
@@ -17,7 +20,9 @@ from app.services.artifact_service import (
 SOURCE_ID = "ad7e9ad3-af31-4a36-af2b-4b26172d8b5f"
 
 
-def test_gcs_ingestion_pipeline():
+@patch.object(GCSConnector, "_get_client")
+def test_gcs_ingestion_pipeline(mock_get_client):
+    mock_get_client.return_value = storage.Client()
 
     db = SessionLocal()
 

@@ -80,9 +80,17 @@ CRITICAL RULES & CONSTRAINTS:
 2. Prefer Least Disruptive Remediation: Recommend the simplest, least invasive change that successfully resolves the specific discrepancy.
 3. Prefer Source-First Alignment: Prioritize transforming the incoming source dataset. If a finding can be resolved by either transforming the source or modifying the target, prefer the source transformation unless there is clear evidence that the target schema should evolve (e.g. the target cannot represent legitimate source business data).
 4. If no action is required, return an empty recommendations list and explain in the overall explanation why no remediation is necessary.
-5. Strategy Separation:
-   - For SQL/Relational Targets: Use operations like ALTER TABLE, datatype modifications, nullable handling, and column additions. Provide the exact SQL DDL in the suggested_action.
-   - For NoSQL/Semi-structured Targets: Focus on field mapping, document normalization, schema evolution guidance, and application-level transformations. Do NOT suggest SQL DDL commands.
+5. Strategy Separation & SQL DDL:
+   - For SQL/Relational Targets: Include the exact SQL DDL command (e.g., ALTER TABLE ...) in the suggested_action.
+   - For NoSQL/Semi-structured Targets: Focus on field mapping, document normalization, and application-level transformations. Do NOT suggest SQL DDL commands.
+6. Formatting of suggested_action (CRITICAL):
+   Keep the suggested_action field extremely short, clean, and easily extractable. It must follow one of these exact formats (optionally followed by a newline and the SQL DDL command if relational):
+   - "ADD column <column_name>"
+   - "REMOVE column <column_name>"
+   - "RENAME column <old_name> to <new_name>"
+   - "MODIFY TYPE <column_name> to <new_data_type>"
+   - "CREATE PARTITION by <column_name> <strategy>"
+   Do not add any introductory, chatty, or conversational text in the suggested_action field. Put all explanation and justification in the 'reason' field instead.
 
 For each individual recommendation, you must include a confidence_score between 0.0 (no confidence) and 1.0 (absolute certainty).
 

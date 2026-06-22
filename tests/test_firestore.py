@@ -93,13 +93,33 @@ def test_extract_sample_success(mock_get_client, mock_source):
     assert len(parsed_content) == 2
     assert parsed_content[0] == {"name": "Alice", "info": {"age": 30}}
 
-    # Verify field frequencies
-    freq = raw_data.connector_metadata["field_frequencies"]
+    assert raw_data.connector_metadata["sampled_count"] == 2
+
+
+def test_extract_metadata_frequencies():
+    from app.models.domain.dataset import Dataset
+    from app.services.metadata_service import extract_metadata
+
+    records = [
+        {"name": "Alice", "info": {"age": 30}},
+        {"name": "Bob", "info": {"location": "NY"}}
+    ]
+
+    # Test JSON dataset - should calculate frequencies
+    dataset_json = Dataset(records=records, source_type="FIRESTORE", format_type="JSON")
+    metadata_json = extract_metadata(dataset_json, {})
+
+    freq = metadata_json.field_frequencies
     assert freq["name"] == 2
     assert freq["info"] == 2
     assert freq["info.age"] == 1
     assert freq["info.location"] == 1
-    assert raw_data.connector_metadata["sampled_count"] == 2
+
+    # Test CSV dataset - should NOT calculate frequencies
+    dataset_csv = Dataset(records=records, source_type="GCS", format_type="CSV")
+    metadata_csv = extract_metadata(dataset_csv, {})
+
+    assert metadata_csv.field_frequencies == {}
 
 
 @patch.object(FirestoreConnector, "_get_previous_update_time")

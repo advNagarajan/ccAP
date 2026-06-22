@@ -61,17 +61,6 @@ class FirestoreConnector(BaseConnector):
         finally:
             db.close()
 
-    def _walk_dict(self, d, prefix="") -> list[str]:
-        paths = []
-        if not isinstance(d, dict):
-            return paths
-        for k, v in d.items():
-            path = f"{prefix}.{k}" if prefix else k
-            paths.append(path)
-            if isinstance(v, dict):
-                paths.extend(self._walk_dict(v, path))
-        return paths
-
     def list_artifacts(self, source) -> list[Artifact]:
         connection_details = source.connection_details
         collection_name = connection_details["collection"]
@@ -138,21 +127,13 @@ class FirestoreConnector(BaseConnector):
         docs = client.get_all(sampled_refs) if sampled_refs else []
 
         records = []
-        field_frequencies = {}
         for doc in docs:
             if doc.exists:
-                doc_dict = doc.to_dict()
-                records.append(doc_dict)
-                
-                # 4. Calculate field frequencies including nested fields
-                for path in self._walk_dict(doc_dict):
-                    field_frequencies[path] = field_frequencies.get(path, 0) + 1
+                records.append(doc.to_dict())
 
         content = json.dumps(records, default=str)
 
-        # 5. Append frequency map to connector metadata
         connector_metadata = dict(artifact.metadata)
-        connector_metadata["field_frequencies"] = field_frequencies
         connector_metadata["sampled_count"] = len(records)
 
         return RawData(

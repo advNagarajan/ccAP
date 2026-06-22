@@ -114,7 +114,7 @@ def process_dataset_received(message_data: bytes):
 
         metadata = extract_metadata(
             dataset,
-            artifact.metadata
+            raw_data.connector_metadata
         )
 
         profile = save_metadata(

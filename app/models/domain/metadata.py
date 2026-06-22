@@ -64,3 +64,5 @@ class DatasetMetadata:
     connector_metadata: dict[str, object]
 
     sample_records: list[dict]
+
+    field_frequencies: dict[str, int] = field(default_factory=dict)

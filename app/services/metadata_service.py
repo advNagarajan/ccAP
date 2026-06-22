@@ -111,6 +111,18 @@ def extract_structure_metadata(
     )
 
 
+def _walk_dict_paths(d, prefix="") -> list[str]:
+    paths = []
+    if not isinstance(d, dict):
+        return paths
+    for k, v in d.items():
+        path = f"{prefix}.{k}" if prefix else k
+        paths.append(path)
+        if isinstance(v, dict):
+            paths.extend(_walk_dict_paths(v, path))
+    return paths
+
+
 def extract_metadata(
     dataset: Dataset,
     connector_metadata: dict[str, object]
@@ -236,6 +248,13 @@ def extract_metadata(
         records
     )
 
+    field_frequencies = {}
+    if dataset.format_type == "JSON":
+        for record in records:
+            if isinstance(record, dict):
+                for path in _walk_dict_paths(record):
+                    field_frequencies[path] = field_frequencies.get(path, 0) + 1
+
     return DatasetMetadata(
         statistics=DatasetStatistics(
             row_count=row_count,
@@ -244,7 +263,8 @@ def extract_metadata(
         columns=columns,
         structure=structure,
         connector_metadata=connector_metadata,
-        sample_records=records[:10]
+        sample_records=records[:10],
+        field_frequencies=field_frequencies
     )
 
 

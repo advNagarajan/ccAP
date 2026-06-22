@@ -55,6 +55,8 @@ def approve_fallback_request(
             approved_by=payload.approved_by,
             review_notes=payload.review_notes,
             db=db,
+            schema_name=payload.schema_name,
+            table_name=payload.table_name,
             connection_details=payload.connection_details
         )
         return {

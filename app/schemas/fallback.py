@@ -10,13 +10,13 @@ class DatabaseConnectionDetails(BaseModel):
     database: str | None = None
     username: str | None = None
     password: str | None = None
-    schema_name: str | None = "raw_landing"
-    table_name: str | None = None
 
 
 class FallbackApproveRequest(BaseModel):
     approved_by: str | None = None
     review_notes: str | None = None
+    schema_name: str | None = "raw_landing"
+    table_name: str | None = None
     connection_details: DatabaseConnectionDetails | None = None
 
 

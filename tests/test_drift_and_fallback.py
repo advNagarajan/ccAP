@@ -253,9 +253,8 @@ def test_critical_drift_creates_fallback_request(mock_pub_fallback, mock_publish
 
 # ==========================================
 
-@patch("app.services.backup_table_service.publish_fallback_landing_created")
 @patch("app.services.backup_table_service.publish_job_completed")
-def test_create_backup_table_success(mock_completed, mock_pub):
+def test_create_backup_table_success(mock_completed):
     db = MagicMock()
     request_id = uuid.uuid4()
     job_id = uuid.uuid4()
@@ -322,7 +321,6 @@ def test_create_backup_table_success(mock_completed, mock_pub):
     stage_logs = [x for x in added_objects if isinstance(x, JobStageHistory)]
     assert len(stage_logs) == 1
     assert stage_logs[0].stage_name == "Fallback Landing Created"
-    mock_pub.assert_called_once()
     mock_completed.assert_called_once()
 
 
@@ -380,10 +378,9 @@ def test_map_observed_type_to_sql():
     assert map_observed_type_to_sql(["dict"], "mysql") == "JSON"
 
 
-@patch("app.services.backup_table_service.publish_fallback_landing_created")
 @patch("app.services.backup_table_service.publish_job_completed")
 @patch("sqlalchemy.create_engine")
-def test_create_backup_table_custom_db(mock_engine, mock_completed, mock_created):
+def test_create_backup_table_custom_db(mock_engine, mock_completed):
     db = MagicMock()
     request_id = uuid.uuid4()
     job_id = uuid.uuid4()
@@ -429,15 +426,21 @@ def test_create_backup_table_custom_db(mock_engine, mock_completed, mock_created
     from app.schemas.fallback import DatabaseConnectionDetails
     conn_details = DatabaseConnectionDetails(
         db_type="sqlite",
-        database="test_custom.db",
-        schema_name=None,
-        table_name="custom_table"
+        database="test_custom.db"
     )
 
     mock_conn = MagicMock()
     mock_engine.return_value.connect.return_value.__enter__.return_value = mock_conn
 
-    table_name = create_backup_table_for_request(request_id, "admin", "Notes", db, conn_details)
+    table_name = create_backup_table_for_request(
+        request_id,
+        "admin",
+        "Notes",
+        db,
+        schema_name=None,
+        table_name="custom_table",
+        connection_details=conn_details
+    )
 
     assert table_name == "custom_table"
     assert request.request_status == "APPROVED"
@@ -499,6 +502,8 @@ def test_route_approve_request(mock_approve):
             approved_by="admin",
             review_notes="Looks good",
             db=db,
+            schema_name="raw_landing",
+            table_name=None,
             connection_details=None
         )
     finally:

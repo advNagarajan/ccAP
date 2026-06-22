@@ -139,12 +139,14 @@ def create_backup_table_for_request(
     approved_by: str | None,
     review_notes: str | None,
     db: Session,
+    schema_name: str | None = "raw_landing",
+    table_name: str | None = None,
     connection_details: DatabaseConnectionDetails | None = None
 ) -> str:
     """
     Approves a pending SchemaFallbackRequest, generates backup table DDL (dialect-aware),
     executes it (locally or on custom remote db), updates job state to COMPLETED,
-    and publishes fallback-landing-created and job-completed events.
+    and publishes job-completed events.
     """
     request = db.get(SchemaFallbackRequest, request_id)
     if not request:
@@ -154,13 +156,8 @@ def create_backup_table_for_request(
         raise ValueError(f"Request is not PENDING (current status: {request.request_status})")
 
     dialect = "postgresql"
-    schema_name = "raw_landing"
-    table_name = None
-    
     if connection_details:
         dialect = connection_details.db_type or "postgresql"
-        schema_name = connection_details.schema_name
-        table_name = connection_details.table_name
 
     # Determine default table name if not set
     if not table_name:
@@ -233,9 +230,8 @@ def create_backup_table_for_request(
     # Re-evaluate overall job status from artifact states
     update_job_status_from_artifacts(request.job_id, db)
 
-    # Publish Completed & Fallback landing created events, passing artifact_id
+    # Publish Completed event, passing artifact_id
     source_id = job.source_id if job else None
-    publish_fallback_landing_created(request.job_id, source_id, full_table_name)
     publish_job_completed(
         request.job_id,
         source_id,

@@ -1,7 +1,12 @@
 import json
+import random
+from datetime import datetime
+from sqlalchemy import select
 from google.cloud import firestore
 from google.oauth2 import service_account
 
+from app.db.database import SessionLocal
+from app.models.db.artifact_record import ArtifactRecord
 from app.connectors.base import BaseConnector
 from app.models.domain.artifact import Artifact
 from app.models.domain.raw_data import RawData
@@ -37,45 +42,73 @@ class FirestoreConnector(BaseConnector):
             credentials=credentials
         )
 
+    def _get_previous_update_time(self, source_id) -> datetime | None:
+        db = SessionLocal()
+        try:
+            last_record = db.execute(
+                select(ArtifactRecord)
+                .where(ArtifactRecord.source_id == source_id)
+                .where(ArtifactRecord.status == "PROCESSED")
+                .order_by(ArtifactRecord.processed_at.desc())
+            ).scalars().first()
+
+            if last_record and "update_time" in last_record.artifact_metadata:
+                try:
+                    return datetime.fromisoformat(last_record.artifact_metadata["update_time"])
+                except Exception:
+                    pass
+            return None
+        finally:
+            db.close()
+
+    def _walk_dict(self, d, prefix="") -> list[str]:
+        paths = []
+        if not isinstance(d, dict):
+            return paths
+        for k, v in d.items():
+            path = f"{prefix}.{k}" if prefix else k
+            paths.append(path)
+            if isinstance(v, dict):
+                paths.extend(self._walk_dict(v, path))
+        return paths
+
     def list_artifacts(self, source) -> list[Artifact]:
         connection_details = source.connection_details
         collection_name = connection_details["collection"]
 
         client = self._get_client(connection_details)
-        docs = client.collection(collection_name).stream()
+        docs = client.collection(collection_name).select([]).stream()
 
-        artifacts = []
+        max_update_time = None
         for doc in docs:
             update_time = doc.update_time
-            update_time_iso = update_time.isoformat()
-            
-            try:
-                version_suffix = f"{update_time.timestamp_pb().seconds}_{update_time.timestamp_pb().nanoseconds}"
-            except AttributeError:
-                version_suffix = f"{int(update_time.timestamp())}"
+            if max_update_time is None or update_time > max_update_time:
+                max_update_time = update_time
 
-            external_id = f"{doc.id}:{version_suffix}"
+        if max_update_time is None:
+            return []
 
-            doc_dict = doc.to_dict()
-            size_bytes = len(json.dumps(doc_dict, default=str))
+        try:
+            version_suffix = f"{max_update_time.timestamp_pb().seconds}_{max_update_time.timestamp_pb().nanoseconds}"
+        except AttributeError:
+            version_suffix = f"{int(max_update_time.timestamp())}"
 
-            artifacts.append(
-                Artifact(
-                    external_id=external_id,
-                    artifact_name=doc.id,
-                    last_modified=update_time_iso,
-                    metadata={
-                        "collection": collection_name,
-                        "document_id": doc.id,
-                        "object_name": doc.id,
-                        "update_time": update_time_iso,
-                        "size": size_bytes,
-                        "etag": f"{doc.id}:{version_suffix}"
-                    }
-                )
+        external_id = f"{collection_name}:{version_suffix}"
+        max_update_time_iso = max_update_time.isoformat()
+
+        return [
+            Artifact(
+                external_id=external_id,
+                artifact_name=collection_name,
+                last_modified=max_update_time_iso,
+                metadata={
+                    "collection": collection_name,
+                    "object_name": collection_name,
+                    "update_time": max_update_time_iso,
+                    "etag": f"{collection_name}:{version_suffix}"
+                }
             )
-
-        return artifacts
+        ]
 
     def get_unprocessed_artifacts(self, source, artifacts, db) -> list[Artifact]:
         discover_new_artifacts(
@@ -91,65 +124,101 @@ class FirestoreConnector(BaseConnector):
 
     def extract_sample(self, source, artifact: Artifact) -> RawData:
         collection_name = artifact.metadata["collection"]
-        document_id = artifact.metadata["document_id"]
 
         client = self._get_client(source.connection_details)
-        doc_ref = client.collection(collection_name).document(document_id)
-        doc = doc_ref.get()
+        
+        # 1. Fetch document references only (metadata scan)
+        doc_snapshots = list(client.collection(collection_name).select([]).stream())
+        
+        # 2. Randomly sample up to 1000 documents
+        sampled_snapshots = random.sample(doc_snapshots, min(len(doc_snapshots), 1000))
+        sampled_refs = [snap.reference for snap in sampled_snapshots]
+        
+        # 3. Batch fetch the sampled documents
+        docs = client.get_all(sampled_refs) if sampled_refs else []
 
-        if not doc.exists:
-            raise Exception(f"Document {document_id} not found in collection {collection_name}")
+        records = []
+        field_frequencies = {}
+        for doc in docs:
+            if doc.exists:
+                doc_dict = doc.to_dict()
+                records.append(doc_dict)
+                
+                # 4. Calculate field frequencies including nested fields
+                for path in self._walk_dict(doc_dict):
+                    field_frequencies[path] = field_frequencies.get(path, 0) + 1
 
-        doc_dict = doc.to_dict()
-        content = json.dumps(doc_dict, default=str)
+        content = json.dumps(records, default=str)
+
+        # 5. Append frequency map to connector metadata
+        connector_metadata = dict(artifact.metadata)
+        connector_metadata["field_frequencies"] = field_frequencies
+        connector_metadata["sampled_count"] = len(records)
 
         return RawData(
             content=content,
             format_type="JSON",
             source_type=source.source_type,
-            source_name=document_id,
-            connector_metadata=artifact.metadata
+            source_name=collection_name,
+            connector_metadata=connector_metadata
         )
 
     def extract_full(self, source, artifact: Artifact) -> RawData:
-        return self.extract_sample(source, artifact)
+        collection_name = artifact.metadata["collection"]
+        previous_update_time = self._get_previous_update_time(source.source_id)
+
+        client = self._get_client(source.connection_details)
+        docs = client.collection(collection_name).stream()
+
+        records = []
+        for doc in docs:
+            if previous_update_time is None or doc.update_time > previous_update_time:
+                records.append(doc.to_dict())
+
+        content = json.dumps(records, default=str)
+
+        return RawData(
+            content=content,
+            format_type="JSON",
+            source_type=source.source_type,
+            source_name=collection_name,
+            connector_metadata=artifact.metadata
+        )
 
     def get_artifact(self, source, artifact_external_id: str) -> Artifact | None:
         if ":" not in artifact_external_id:
             return None
             
-        document_id = artifact_external_id.split(":")[0]
+        collection_name = artifact_external_id.split(":")[0]
         connection_details = source.connection_details
-        collection_name = connection_details["collection"]
 
         client = self._get_client(connection_details)
-        doc_ref = client.collection(collection_name).document(document_id)
-        doc = doc_ref.get()
+        docs = client.collection(collection_name).select([]).stream()
 
-        if not doc.exists:
+        max_update_time = None
+        for doc in docs:
+            update_time = doc.update_time
+            if max_update_time is None or update_time > max_update_time:
+                max_update_time = update_time
+
+        if max_update_time is None:
             return None
 
-        update_time = doc.update_time
-        update_time_iso = update_time.isoformat()
-        
         try:
-            version_suffix = f"{update_time.timestamp_pb().seconds}_{update_time.timestamp_pb().nanoseconds}"
+            version_suffix = f"{max_update_time.timestamp_pb().seconds}_{max_update_time.timestamp_pb().nanoseconds}"
         except AttributeError:
-            version_suffix = f"{int(update_time.timestamp())}"
+            version_suffix = f"{int(max_update_time.timestamp())}"
 
-        doc_dict = doc.to_dict()
-        size_bytes = len(json.dumps(doc_dict, default=str))
+        max_update_time_iso = max_update_time.isoformat()
 
         return Artifact(
-            external_id=f"{doc.id}:{version_suffix}",
-            artifact_name=doc.id,
-            last_modified=update_time_iso,
+            external_id=f"{collection_name}:{version_suffix}",
+            artifact_name=collection_name,
+            last_modified=max_update_time_iso,
             metadata={
                 "collection": collection_name,
-                "document_id": doc.id,
-                "object_name": doc.id,
-                "update_time": update_time_iso,
-                "size": size_bytes,
-                "etag": f"{doc.id}:{version_suffix}"
+                "object_name": collection_name,
+                "update_time": max_update_time_iso,
+                "etag": f"{collection_name}:{version_suffix}"
             }
         )

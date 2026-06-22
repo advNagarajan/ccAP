@@ -58,7 +58,8 @@ def process_schema_drift(
         # Idempotent lookup for SchemaDrift
         drift_record = db.execute(
             select(SchemaDrift).where(
-                SchemaDrift.job_id == job_uuid
+                SchemaDrift.job_id == job_uuid,
+                SchemaDrift.artifact_id == artifact_uuid
             )
         ).scalar_one_or_none()
 
@@ -105,13 +106,7 @@ def process_schema_drift(
                     "drift_score": 0.0
                 }
             )
-            publish_drift_detected(
-                job_id=job_id,
-                artifact_id=artifact_id,
-                drift_id=str(drift_record.drift_id),
-                drift_status="SKIPPED",
-                drift_score=0.0
-            )
+
             return drift_record
 
         # Fetch TargetCatalog
@@ -170,11 +165,12 @@ def process_schema_drift(
 
         # Handle CRITICAL_DRIFT
         if drift_status == "CRITICAL_DRIFT":
-            # Check if there is already an active fallback request for this job to be idempotent
+            # Check if there is already an active fallback request for this artifact to be idempotent
             fallback_req = (
                 db.query(SchemaFallbackRequest)
                 .filter(
                     SchemaFallbackRequest.job_id == job_uuid,
+                    SchemaFallbackRequest.artifact_id == artifact_uuid,
                     SchemaFallbackRequest.request_status == "PENDING"
                 )
                 .first()
@@ -220,14 +216,15 @@ def process_schema_drift(
             }
         )
 
-        # Publish drift event
-        publish_drift_detected(
-            job_id=job_id,
-            artifact_id=artifact_id,
-            drift_id=str(drift_record.drift_id),
-            drift_status=drift_status,
-            drift_score=drift_score
-        )
+        # Publish drift event only if drift is not critical
+        if drift_status != "CRITICAL_DRIFT":
+            publish_drift_detected(
+                job_id=job_id,
+                artifact_id=artifact_id,
+                drift_id=str(drift_record.drift_id),
+                drift_status=drift_status,
+                drift_score=drift_score
+            )
 
         logger.info(f"Drift detection finished successfully for job_id={job_id} status={drift_status} score={drift_score}")
         return drift_record

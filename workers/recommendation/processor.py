@@ -49,7 +49,8 @@ async def process_schema_recommendation(
         # Idempotent lookup
         rec_record = db.execute(
             select(SchemaRecommendation).where(
-                SchemaRecommendation.job_id == job_uuid
+                SchemaRecommendation.job_id == job_uuid,
+                SchemaRecommendation.artifact_id == artifact_uuid
             )
         ).scalar_one_or_none()
 
@@ -95,19 +96,20 @@ async def process_schema_recommendation(
                 }
             )
 
-            # Mark parent job completed
+            # Mark parent job completed only if it is not already in PENDING_REVIEW or FAILED
             job = db.get(Job, job_uuid)
             if job:
-                job.status = "COMPLETED"
-                db.commit()
-
-            # Publish job completed
-            publish_job_completed(
-                job_id=job_id,
-                source_id=str(job.source_id) if job else "",
-                recommendations_count=0,
-                target_name=None
-            )
+                if job.status not in ("PENDING_REVIEW", "FAILED"):
+                    job.status = "COMPLETED"
+                    db.commit()
+                    publish_job_completed(
+                        job_id=job_id,
+                        source_id=str(job.source_id) if job else "",
+                        recommendations_count=0,
+                        target_name=None
+                    )
+                else:
+                    db.commit()
             return rec_record
 
         # Fetch TargetCatalog
@@ -195,19 +197,20 @@ async def process_schema_recommendation(
             }
         )
 
-        # Mark parent job completed
+        # Mark parent job completed only if it is not already in PENDING_REVIEW or FAILED
         job = db.get(Job, job_uuid)
         if job:
-            job.status = "COMPLETED"
-            db.commit()
-
-        # Publish job completed
-        publish_job_completed(
-            job_id=job_id,
-            source_id=str(job.source_id) if job else "",
-            recommendations_count=len(recommendations_data),
-            target_name=target.target_name
-        )
+            if job.status not in ("PENDING_REVIEW", "FAILED"):
+                job.status = "COMPLETED"
+                db.commit()
+                publish_job_completed(
+                    job_id=job_id,
+                    source_id=str(job.source_id) if job else "",
+                    recommendations_count=len(recommendations_data),
+                    target_name=target.target_name
+                )
+            else:
+                db.commit()
 
         logger.info(f"Schema Recommendation finished successfully for job_id={job_id} recs={len(recommendations_data)}")
         return rec_record

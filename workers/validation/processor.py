@@ -51,13 +51,15 @@ def process_schema_validation(
         # Idempotent lookups
         val_record = db.execute(
             select(SchemaValidation).where(
-                SchemaValidation.job_id == job_uuid
+                SchemaValidation.job_id == job_uuid,
+                SchemaValidation.artifact_id == UUID(artifact_id)
             )
         ).scalar_one_or_none()
 
         fallback_req = db.execute(
             select(SchemaFallbackRequest).where(
-                SchemaFallbackRequest.job_id == job_uuid
+                SchemaFallbackRequest.job_id == job_uuid,
+                SchemaFallbackRequest.artifact_id == UUID(artifact_id)
             )
         ).scalar_one_or_none()
 
@@ -148,13 +150,7 @@ def process_schema_validation(
                     "issue_count": 0
                 }
             )
-            publish_schema_validated(
-                job_id=job_id,
-                artifact_id=artifact_id,
-                inference_id=inference_id,
-                validation_id=str(val_record.validation_id),
-                validation_status="SKIPPED"
-            )
+
             return val_record
 
         target = db.get(TargetCatalog, inference.target_id)
@@ -258,14 +254,15 @@ def process_schema_validation(
             }
         )
 
-        # Publish validation event
-        publish_schema_validated(
-            job_id=job_id,
-            artifact_id=artifact_id,
-            inference_id=inference_id,
-            validation_id=str(val_record.validation_id),
-            validation_status=results["validation_status"]
-        )
+        # Publish validation event only if it did not fail
+        if results["validation_status"] != "FAILED":
+            publish_schema_validated(
+                job_id=job_id,
+                artifact_id=artifact_id,
+                inference_id=inference_id,
+                validation_id=str(val_record.validation_id),
+                validation_status=results["validation_status"]
+            )
 
         logger.info(f"Schema Validation finished successfully for job_id={job_id} status={results['validation_status']}")
         return val_record

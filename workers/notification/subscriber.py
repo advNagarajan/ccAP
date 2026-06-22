@@ -47,10 +47,16 @@ def start_subscriber():
 
     logger.info("Notification subscriber started successfully. Listening for events...")
     
-    # Block and wait for termination
-    for future in futures:
-        try:
-            future.result()
-        except Exception as e:
-            logger.error(f"Error in subscriber future: {e}")
+    try:
+        # Block and wait for termination
+        for future in futures:
+            try:
+                future.result()
+            except Exception as e:
+                logger.error(f"Error in subscriber future: {e}")
+    except KeyboardInterrupt:
+        logger.info("Stopping notification subscriber...")
+        for future in futures:
+            future.cancel()
+        logger.info("Subscriber stopped")
 

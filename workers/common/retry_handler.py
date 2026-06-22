@@ -3,11 +3,14 @@ import threading
 import time
 import socket
 import json
+from uuid import UUID
 from sqlalchemy.orm import Session
 from app.models.db.job import Job
 from app.constants.job_status import JobStatus
 from app.pubsub.publisher import publish_job_failed, publish_event
 from app.core.settings import settings
+from app.models.db.artifact_record import ArtifactRecord
+from app.services.job_stage_service import update_job_status_from_artifacts
 
 # Option C: Import Google Cloud core exceptions
 from google.api_core import exceptions as google_exceptions
@@ -283,15 +286,37 @@ def handle_worker_failure(job_id: str, worker_name: str, error: Exception, messa
         
         logger.error(f"Job {job_id} failed permanently in worker '{worker_name}' due to: {error_msg}")
 
-        # Update Job status in DB
-        job.status = JobStatus.FAILED
-        job.error_message = error_msg
-        db.commit()
+        # Extract artifact_id from original payload if present
+        artifact_id = None
+        original_payload = {}
+        try:
+            original_payload = json.loads(message.data.decode("utf-8"))
+            if isinstance(original_payload, dict):
+                art_id_str = original_payload.get("artifact_id")
+                if art_id_str:
+                    artifact_id = UUID(art_id_str)
+        except Exception as e_payload:
+            logger.warning(f"Could not parse original payload from message: {e_payload}")
+
+        # Update Job or Artifact status in DB
+        if artifact_id:
+            # Mark the specific artifact as failed
+            art_rec = db.get(ArtifactRecord, artifact_id)
+            if art_rec:
+                art_rec.status = "FAILED"
+                art_rec.failure_reason = error_msg
+            db.commit()
+            
+            # Re-evaluate overall job status from artifact states
+            update_job_status_from_artifacts(job.job_id, db)
+        else:
+            # Fallback to failing the entire job if no artifact_id is present
+            job.status = JobStatus.FAILED
+            job.error_message = error_msg
+            db.commit()
 
         # Force a publish to the Dead Letter Topic manually so it is captured immediately
         try:
-            # Get the original payload data
-            original_payload = json.loads(message.data.decode("utf-8"))
             dlq_payload = {
                 "job_id": job_id,
                 "source_id": str(job.source_id),
@@ -301,19 +326,32 @@ def handle_worker_failure(job_id: str, worker_name: str, error: Exception, messa
                 "error_message": str(error),
                 "original_payload": original_payload
             }
+            if artifact_id:
+                dlq_payload["artifact_id"] = str(artifact_id)
             # Manually publish to Dead Letter Topic using setting
             dlq_topic = getattr(settings, "PUBSUB_TOPIC_DEAD_LETTER", "job-failures-dead-letter-topic")
             publish_event(dlq_topic, dlq_payload)
-            logger.info(f"Forced manual publish to '{dlq_topic}' for job={job_id}")
+            logger.info(f"Forced manual publish to '{dlq_topic}' for job={job_id} (artifact_id={artifact_id})")
         except Exception as pub_dlq_err:
             logger.error(f"Failed to publish manually to DLQ topic for job={job_id}: {pub_dlq_err}")
 
         # Also publish standard job-failed event
         try:
-            publish_job_failed(job.job_id, job.source_id, error_msg, failed_at_worker=worker_name, attempt_number=attempt)
+            kwargs = {
+                "failed_at_worker": worker_name,
+                "attempt_number": attempt
+            }
+            if artifact_id:
+                kwargs["artifact_id"] = str(artifact_id)
+            publish_job_failed(
+                job.job_id,
+                job.source_id,
+                error_msg,
+                **kwargs
+            )
         except Exception as pub_failed_err:
             logger.error(f"Failed to publish standard job failed event for job={job_id}: {pub_failed_err}")
 
         # ACK original message to remove it from Pub/Sub active queue
         message.ack()
-        logger.info(f"Acknowledged permanently failed message {message.message_id} for job={job_id}.")
+        logger.info(f"Acknowledged permanently failed message {message.message_id} for job={job_id} (artifact_id={artifact_id}).")

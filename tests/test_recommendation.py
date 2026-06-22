@@ -197,5 +197,6 @@ async def test_process_recommendation_flow():
             job_id=job_id,
             source_id=str(job.source_id),
             recommendations_count=1,
-            target_name="users"
+            target_name="users",
+            artifact_id=str(artifact_id)
         )

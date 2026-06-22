@@ -10,6 +10,7 @@ from app.models.db.job_stage_history import JobStageHistory
 from app.models.db.metadata_profile import MetadataProfile
 from app.schemas.fallback import DatabaseConnectionDetails
 from app.pubsub.publisher import publish_fallback_landing_created, publish_job_completed, publish_job_failed
+from app.services.job_stage_service import update_job_status_from_artifacts
 
 logger = logging.getLogger("backup_table_service")
 
@@ -210,9 +211,7 @@ def create_backup_table_for_request(
     # Update Job
     job = db.get(Job, request.job_id)
     if job:
-        job.status = "COMPLETED"
         job.error_message = None
-        job.completed_at = datetime.now(UTC)
 
     # Log Stage
     stage = JobStageHistory(
@@ -229,12 +228,22 @@ def create_backup_table_for_request(
     )
     db.add(stage)
 
-    # Publish Completed & Fallback landing created events
+    db.commit()
+
+    # Re-evaluate overall job status from artifact states
+    update_job_status_from_artifacts(request.job_id, db)
+
+    # Publish Completed & Fallback landing created events, passing artifact_id
     source_id = job.source_id if job else None
     publish_fallback_landing_created(request.job_id, source_id, full_table_name)
-    publish_job_completed(request.job_id, source_id, recommendations_count=0, target_name=full_table_name)
+    publish_job_completed(
+        request.job_id,
+        source_id,
+        recommendations_count=0,
+        target_name=full_table_name,
+        artifact_id=str(request.artifact_id)
+    )
 
-    db.commit()
     logger.info(f"Backup table {full_table_name} created and request approved successfully.")
     return full_table_name
 
@@ -263,9 +272,7 @@ def reject_fallback_request(
     # Update Job
     job = db.get(Job, request.job_id)
     if job:
-        job.status = "FAILED"
         job.error_message = f"Fallback request rejected by user: {review_notes}"
-        job.completed_at = datetime.now(UTC)
 
     # Log Stage
     stage = JobStageHistory(
@@ -281,13 +288,18 @@ def reject_fallback_request(
     )
     db.add(stage)
 
-    # Publish Failed event
+    db.commit()
+
+    # Re-evaluate overall job status from artifact states
+    update_job_status_from_artifacts(request.job_id, db)
+
+    # Publish Failed event, passing artifact_id
     source_id = job.source_id if job else None
     publish_job_failed(
         job_id=request.job_id,
         source_id=source_id,
-        error_message=f"Fallback request rejected by user: {review_notes}"
+        error_message=f"Fallback request rejected by user: {review_notes}",
+        artifact_id=str(request.artifact_id)
     )
 
-    db.commit()
     logger.info(f"Fallback request {request_id} rejected successfully.")

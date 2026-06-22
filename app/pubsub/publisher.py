@@ -75,13 +75,21 @@ def publish_metadata_extracted(
         payload
     )
 
-def publish_job_completed(job_id, source_id, recommendations_count: int = 0, target_name: str | None = None):
+def publish_job_completed(
+    job_id,
+    source_id,
+    recommendations_count: int = 0,
+    target_name: str | None = None,
+    artifact_id: str | None = None
+):
     payload = {
         "job_id": str(job_id),
         "source_id": str(source_id),
         "recommendations_count": recommendations_count,
         "target_name": target_name
     }
+    if artifact_id:
+        payload["artifact_id"] = str(artifact_id)
 
     return publish_event(
         settings.PUBSUB_TOPIC_JOB_COMPLETED,
@@ -89,7 +97,14 @@ def publish_job_completed(job_id, source_id, recommendations_count: int = 0, tar
     )
 
 
-def publish_job_failed(job_id, source_id, error_message, failed_at_worker=None, attempt_number=None):
+def publish_job_failed(
+    job_id,
+    source_id,
+    error_message,
+    failed_at_worker=None,
+    attempt_number=None,
+    artifact_id: str | None = None
+):
     payload = {
         "job_id": str(job_id),
         "source_id": str(source_id),
@@ -99,11 +114,14 @@ def publish_job_failed(job_id, source_id, error_message, failed_at_worker=None, 
         payload["failed_at_worker"] = str(failed_at_worker)
     if attempt_number is not None:
         payload["attempt_number"] = int(attempt_number)
+    if artifact_id:
+        payload["artifact_id"] = str(artifact_id)
 
     return publish_event(
         settings.PUBSUB_TOPIC_JOB_FAILED,
         payload
     )
+
 
 
 def publish_target_mutated(target_id):

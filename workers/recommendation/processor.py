@@ -10,7 +10,7 @@ from app.models.db.landing_inference import LandingInference
 from app.models.db.target_catalog import TargetCatalog
 from app.models.db.schema_recommendation import SchemaRecommendation
 from app.models.db.llm_feedback_loop import LlmFeedbackLoop
-from app.services.job_stage_service import start_stage, complete_stage, fail_stage
+from app.services.job_stage_service import start_stage, complete_stage, fail_stage, update_job_status_from_artifacts
 from app.services.recommendation_service import extract_deterministic_findings, generate_schema_recommendations
 from app.pubsub.publisher import publish_job_completed
 
@@ -96,20 +96,18 @@ async def process_schema_recommendation(
                 }
             )
 
-            # Mark parent job completed only if it is not already in PENDING_REVIEW or FAILED
+            # Re-evaluate overall job status from artifact states
+            update_job_status_from_artifacts(job_uuid, db)
+
+            # Always publish completion message for this artifact, passing artifact_id
             job = db.get(Job, job_uuid)
-            if job:
-                if job.status not in ("PENDING_REVIEW", "FAILED"):
-                    job.status = "COMPLETED"
-                    db.commit()
-                    publish_job_completed(
-                        job_id=job_id,
-                        source_id=str(job.source_id) if job else "",
-                        recommendations_count=0,
-                        target_name=None
-                    )
-                else:
-                    db.commit()
+            publish_job_completed(
+                job_id=job_id,
+                source_id=str(job.source_id) if job else "",
+                recommendations_count=0,
+                target_name=None,
+                artifact_id=str(artifact_uuid)
+            )
             return rec_record
 
         # Fetch TargetCatalog
@@ -197,20 +195,18 @@ async def process_schema_recommendation(
             }
         )
 
-        # Mark parent job completed only if it is not already in PENDING_REVIEW or FAILED
+        # Re-evaluate overall job status from artifact states
+        update_job_status_from_artifacts(job_uuid, db)
+
+        # Always publish completion message for this artifact, passing artifact_id
         job = db.get(Job, job_uuid)
-        if job:
-            if job.status not in ("PENDING_REVIEW", "FAILED"):
-                job.status = "COMPLETED"
-                db.commit()
-                publish_job_completed(
-                    job_id=job_id,
-                    source_id=str(job.source_id) if job else "",
-                    recommendations_count=len(recommendations_data),
-                    target_name=target.target_name
-                )
-            else:
-                db.commit()
+        publish_job_completed(
+            job_id=job_id,
+            source_id=str(job.source_id) if job else "",
+            recommendations_count=len(recommendations_data),
+            target_name=target.target_name,
+            artifact_id=str(artifact_uuid)
+        )
 
         logger.info(f"Schema Recommendation finished successfully for job_id={job_id} recs={len(recommendations_data)}")
         return rec_record

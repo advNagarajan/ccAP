@@ -12,10 +12,14 @@ def process_notification(topic: str, payload: dict, db: Session) -> None:
     """
     job_id = payload.get("job_id")
     source_id = payload.get("source_id")
+    artifact_id = payload.get("artifact_id")
     payload["topic"] = topic
 
     subject = f"System Event: {topic.upper()}"
-    message = f"Job ID: {job_id}\nSource ID: {source_id}\n"
+    message = f"Job ID: {job_id}\n"
+    if artifact_id:
+        message += f"Artifact ID: {artifact_id}\n"
+    message += f"Source ID: {source_id}\n"
 
     if topic == "dead-letter":
         subject = "CRITICAL: Job Failed & Hit Dead Letter Queue"

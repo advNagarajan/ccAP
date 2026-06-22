@@ -209,7 +209,8 @@ async def infer_target_landing_zone(
         # 5. Store result in dedicated landing_inferences table (idempotent lookup)
         inference = db.execute(
             select(LandingInference).where(
-                LandingInference.job_id == job_uuid
+                LandingInference.job_id == job_uuid,
+                LandingInference.artifact_id == profile.artifact_id
             )
         ).scalar_one_or_none()
 

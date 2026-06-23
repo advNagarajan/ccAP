@@ -17,7 +17,7 @@ from app.models.db.user import User
 
 from app.constants.job_status import JobStatus
 
-from app.schemas.job import JobResponse
+from app.schemas.job import JobResponse, JobDetailsResponse
 from app.services.job_stage_service import start_stage, complete_stage, fail_stage
 from app.pubsub.publisher import publish_ingestion_requested
 from app.api.dependencies import get_current_user
@@ -229,8 +229,46 @@ def kill_job(
     return job
 
 
+def get_parent_job_summary(parent_job_id: UUID, db: Session) -> dict | None:
+    if not parent_job_id:
+        return None
+    from app.models.db.job import Job
+    from app.models.db.job_stage_history import JobStageHistory
+    
+    parent_job = db.get(Job, parent_job_id)
+    if not parent_job:
+        return None
+        
+    stages_stmt = select(JobStageHistory).where(JobStageHistory.job_id == parent_job_id).order_by(JobStageHistory.started_at.asc())
+    stages = db.execute(stages_stmt).scalars().all()
+    
+    return {
+        "job_id": parent_job.job_id,
+        "status": parent_job.status,
+        "parent_job_id": parent_job.parent_job_id,
+        "started_at": parent_job.started_at,
+        "completed_at": parent_job.completed_at,
+        "error_message": parent_job.error_message,
+        "created_at": parent_job.created_at,
+        "stages": [
+            {
+                "stage_history_id": st.stage_history_id,
+                "job_id": st.job_id,
+                "stage_name": st.stage_name,
+                "status": st.status,
+                "started_at": st.started_at,
+                "completed_at": st.completed_at,
+                "error_message": st.error_message
+            }
+            for st in stages
+        ],
+        "parent_job": get_parent_job_summary(parent_job.parent_job_id, db) if parent_job.parent_job_id else None
+    }
+
+
 @router.get(
-    "/jobs/{job_id}/details"
+    "/jobs/{job_id}/details",
+    response_model=JobDetailsResponse
 )
 def get_job_details(
     job_id: UUID,
@@ -240,8 +278,10 @@ def get_job_details(
     from app.models.db.schema_validation import SchemaValidation
     from app.models.db.schema_drift import SchemaDrift
     from app.models.db.schema_recommendation import SchemaRecommendation
+    from app.models.db.schema_fallback_request import SchemaFallbackRequest
     from app.models.db.metadata_profile import MetadataProfile
     from app.models.db.target_catalog import TargetCatalog
+    from app.models.db.job_stage_history import JobStageHistory
 
     # 1. Fetch the Job
     job = db.get(Job, job_id)
@@ -251,107 +291,190 @@ def get_job_details(
             detail="Job not found"
         )
 
-    # 2. Fetch associated details (since they may or may not exist yet, we fetch them safely)
-    inference = db.execute(
+    # 2. Fetch current job stages
+    stages_stmt = select(JobStageHistory).where(JobStageHistory.job_id == job_id).order_by(JobStageHistory.started_at.asc())
+    stages = db.execute(stages_stmt).scalars().all()
+
+    # 3. Recursively fetch parent job summary
+    parent_job_summary = get_parent_job_summary(job.parent_job_id, db) if job.parent_job_id else None
+
+    # 4. Fetch associated details per artifact
+    inferences = db.execute(
         select(LandingInference).where(LandingInference.job_id == job_id)
-    ).scalar_one_or_none()
+    ).scalars().all()
 
-    validation = db.execute(
-        select(SchemaValidation).where(SchemaValidation.job_id == job_id)
-    ).scalar_one_or_none()
+    artifact_details = []
+    for inf in inferences:
+        artifact = db.get(ArtifactRecord, inf.artifact_id)
+        if not artifact:
+            continue
 
-    drift = db.execute(
-        select(SchemaDrift).where(SchemaDrift.job_id == job_id)
-    ).scalar_one_or_none()
+        validation = db.execute(
+            select(SchemaValidation).where(SchemaValidation.inference_id == inf.inference_id)
+        ).scalar_one_or_none()
 
-    recommendation = db.execute(
-        select(SchemaRecommendation).where(SchemaRecommendation.job_id == job_id)
-    ).scalar_one_or_none()
+        drift = None
+        if validation:
+            drift = db.execute(
+                select(SchemaDrift).where(SchemaDrift.validation_id == validation.validation_id)
+            ).scalar_one_or_none()
 
+        rec = None
+        if validation:
+            rec = db.execute(
+                select(SchemaRecommendation).where(SchemaRecommendation.validation_id == validation.validation_id)
+            ).scalar_one_or_none()
+
+        fallback = None
+        if validation:
+            fallback = db.execute(
+                select(SchemaFallbackRequest).where(SchemaFallbackRequest.validation_id == validation.validation_id)
+            ).scalar_one_or_none()
+
+        target_id = None
+        if rec and rec.target_id:
+            target_id = rec.target_id
+        elif drift and drift.target_id:
+            target_id = drift.target_id
+        elif validation and validation.target_id:
+            target_id = validation.target_id
+        elif inf.target_id:
+            target_id = inf.target_id
+
+        target = db.get(TargetCatalog, target_id) if target_id else None
+
+        target_summary = None
+        if target:
+            target_summary = {
+                "target_id": target.target_id,
+                "target_name": target.target_name,
+                "target_type": target.target_type,
+                "schema_definition": target.schema_definition
+            }
+
+        validation_summary = None
+        if validation:
+            validation_summary = {
+                "validation_id": validation.validation_id,
+                "validation_status": validation.validation_status,
+                "coverage_percentage": float(validation.coverage_percentage),
+                "target_match_percentage": float(validation.target_match_percentage),
+                "mapped_column_count": validation.mapped_column_count,
+                "source_column_count": validation.source_column_count,
+                "target_column_count": validation.target_column_count,
+                "report_json": validation.report_json,
+                "created_at": validation.created_at
+            }
+
+        drift_summary = None
+        if drift:
+            drift_summary = {
+                "drift_id": drift.drift_id,
+                "drift_status": drift.drift_status,
+                "drift_score": float(drift.drift_score),
+                "drift_summary": drift.drift_summary,
+                "created_at": drift.created_at
+            }
+
+        rec_summary = None
+        if rec:
+            rec_summary = {
+                "recommendation_id": rec.recommendation_id,
+                "recommendation_status": rec.recommendation_status,
+                "deterministic_findings": rec.deterministic_findings,
+                "recommendations_list": rec.recommendations_list,
+                "partitioning_recommendation": rec.partitioning_recommendation,
+                "explanation": rec.explanation,
+                "created_at": rec.created_at
+            }
+
+        fallback_summary = None
+        if fallback:
+            fallback_summary = {
+                "request_id": fallback.request_id,
+                "request_reason": fallback.request_reason,
+                "request_status": fallback.request_status,
+                "backup_table_name": fallback.backup_table_name,
+                "approved_by": fallback.approved_by,
+                "approved_at": fallback.approved_at,
+                "rejected_by": fallback.rejected_by,
+                "rejected_at": fallback.rejected_at,
+                "review_notes": fallback.review_notes,
+                "created_at": fallback.created_at
+            }
+
+        artifact_details.append({
+            "artifact_id": artifact.artifact_id,
+            "source_id": artifact.source_id,
+            "external_artifact_id": artifact.external_artifact_id,
+            "artifact_name": artifact.artifact_name,
+            "status": artifact.status,
+            "processed_at": artifact.processed_at,
+            "discovered_at": artifact.discovered_at,
+            "failure_reason": artifact.failure_reason,
+            "artifact_metadata": artifact.artifact_metadata,
+            "inference": {
+                "inference_id": inf.inference_id,
+                "confidence_score": float(inf.confidence_score),
+                "column_mapping": inf.column_mapping,
+                "unmapped_source_columns": inf.unmapped_source_columns,
+                "missing_target_columns": inf.missing_target_columns,
+                "partitioning_recommendation": inf.partitioning_recommendation,
+                "reasoning": inf.reasoning,
+                "requires_review": inf.requires_review,
+                "created_at": inf.created_at,
+                "matched_target_table": target.target_name if target else None,
+                "matched_target_id": target.target_id if target else None
+            },
+            "validation": validation_summary,
+            "drift": drift_summary,
+            "recommendation": rec_summary,
+            "fallback": fallback_summary,
+            "target": target_summary
+        })
+
+    # If no inferences yet, fall back to base artifacts associated with the source
+    if not artifact_details:
+        all_artifacts = db.execute(
+            select(ArtifactRecord).where(ArtifactRecord.source_id == job.source_id)
+        ).scalars().all()
+        for art in all_artifacts:
+            artifact_details.append({
+                "artifact_id": art.artifact_id,
+                "source_id": art.source_id,
+                "external_artifact_id": art.external_artifact_id,
+                "artifact_name": art.artifact_name,
+                "status": art.status,
+                "processed_at": art.processed_at,
+                "discovered_at": art.discovered_at,
+                "failure_reason": art.failure_reason,
+                "artifact_metadata": art.artifact_metadata,
+                "inference": None,
+                "validation": None,
+                "drift": None,
+                "recommendation": None,
+                "fallback": None,
+                "target": None
+            })
+
+    # 5. Determine schemas
     metadata_profile = db.execute(
         select(MetadataProfile).where(MetadataProfile.job_id == job_id)
     ).scalar_one_or_none()
 
-    # 3. Fetch associated artifact records
-    artifacts = db.execute(
-        select(ArtifactRecord).where(ArtifactRecord.source_id == job.source_id)
-    ).scalars().all()
+    first_target_schema = None
+    if artifact_details:
+        first_target = next((item["target"] for item in artifact_details if item["target"]), None)
+        if first_target:
+            first_target_schema = first_target["schema_definition"]
 
-    # 4. Determine target schema
-    target_id = None
-    if recommendation and recommendation.target_id:
-        target_id = recommendation.target_id
-    elif drift and drift.target_id:
-        target_id = drift.target_id
-    elif validation and validation.target_id:
-        target_id = validation.target_id
-    elif inference and inference.target_id:
-        target_id = inference.target_id
-
-    target = None
-    if target_id:
-        target = db.get(TargetCatalog, target_id)
-
-    # 5. Construct unified response
     return {
-        "job": {
-            "job_id": job.job_id,
-            "source_id": job.source_id,
-            "status": job.status,
-            "current_stage": job.current_stage,
-            "retry_count": job.retry_count,
-            "parent_job_id": job.parent_job_id,
-            "started_at": job.started_at,
-            "completed_at": job.completed_at,
-            "error_message": job.error_message,
-            "created_at": job.created_at,
-            "updated_at": job.updated_at
-        },
-        "inference": {
-            "confidence_score": float(inference.confidence_score) if inference else 0.0,
-            "column_mapping": inference.column_mapping if inference else None,
-            "unmapped_source_columns": inference.unmapped_source_columns if inference else None,
-            "missing_target_columns": inference.missing_target_columns if inference else None,
-            "reasoning": inference.reasoning if inference else None,
-            "requires_review": inference.requires_review if inference else False
-        } if inference else None,
-        "validation": {
-            "validation_status": validation.validation_status,
-            "coverage_percentage": float(validation.coverage_percentage),
-            "target_match_percentage": float(validation.target_match_percentage),
-            "mapped_column_count": validation.mapped_column_count,
-            "source_column_count": validation.source_column_count,
-            "target_column_count": validation.target_column_count,
-            "report_json": validation.report_json
-        } if validation else None,
-        "drift": {
-            "drift_status": drift.drift_status,
-            "drift_score": float(drift.drift_score),
-            "drift_summary": drift.drift_summary
-        } if drift else None,
-        "recommendation": {
-            "recommendation_status": recommendation.recommendation_status,
-            "deterministic_findings": recommendation.deterministic_findings,
-            "recommendations_list": recommendation.recommendations_list,
-            "partitioning_recommendation": recommendation.partitioning_recommendation,
-            "explanation": recommendation.explanation
-        } if recommendation else None,
+        "job": job,
+        "stages": stages,
+        "parent_job": parent_job_summary,
+        "artifacts": artifact_details,
         "source_schema": metadata_profile.metadata_json if metadata_profile else None,
-        "target_schema": target.schema_definition if target else None,
-        "artifacts": [
-            {
-                "artifact_id": str(art.artifact_id),
-                "source_id": str(art.source_id),
-                "external_artifact_id": art.external_artifact_id,
-                "artifact_name": art.artifact_name,
-                "status": art.status,
-                "processed_at": art.processed_at.isoformat() if art.processed_at else None,
-                "discovered_at": art.discovered_at.isoformat() if art.discovered_at else None,
-                "failure_reason": art.failure_reason,
-                "artifact_metadata": art.artifact_metadata
-            }
-            for art in artifacts
-        ]
+        "target_schema": first_target_schema
     }
 
 

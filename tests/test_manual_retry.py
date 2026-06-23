@@ -26,18 +26,20 @@ def mock_add(instance):
 
 mock_db.add = MagicMock(side_effect=mock_add)
 
-@pytest.fixture(autouse=True)
-def reset_mock_db():
-    mock_db.reset_mock()
-    mock_db.add = MagicMock(side_effect=mock_add)
-
 def override_get_db():
     try:
         yield mock_db
     finally:
         pass
 
-app.dependency_overrides[get_db] = override_get_db
+@pytest.fixture(autouse=True)
+def reset_mock_db():
+    mock_db.reset_mock()
+    mock_db.add = MagicMock(side_effect=mock_add)
+    app.dependency_overrides[get_db] = override_get_db
+    yield
+    app.dependency_overrides.pop(get_db, None)
+
 client = TestClient(app)
 
 @patch("app.api.job_routes.publish_ingestion_requested")

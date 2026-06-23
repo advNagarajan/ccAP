@@ -100,7 +100,7 @@ def is_transient_error(e: Exception) -> bool:
 
     # 8. Check error messages for common cloud/infra keywords as a fallback
     err_str = str(e).lower()
-    if any(keyword in err_str for keyword in ["resource_exhausted", "rate limit", "quota", "503", "504", "timeout", "connection refused", "connection pool"]):
+    if any(keyword in err_str for keyword in ["resource_exhausted", "rate limit", "quota", "503", "504", "timeout", "connection refused", "connection pool", "hallucination"]):
         return True
 
     return False

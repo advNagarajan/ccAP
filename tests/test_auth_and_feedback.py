@@ -78,11 +78,18 @@ def override_get_db():
     finally:
         pass
 
-app.dependency_overrides[get_db] = override_get_db
+@pytest.fixture(autouse=True)
+def setup_db_override():
+    app.dependency_overrides[get_db] = override_get_db
+    yield
+    app.dependency_overrides.pop(get_db, None)
+
 client = TestClient(app)
 
 
 def test_auth_and_stage_feedback():
+    mock_users_db.clear()
+    mock_feedback_db.clear()
     print("\n" + "=" * 60)
     print("TEST 1 - USER REGISTRATION & LOGIN")
     print("=" * 60)

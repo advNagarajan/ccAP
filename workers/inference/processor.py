@@ -13,7 +13,11 @@ from app.models.db.llm_feedback_loop import LlmFeedbackLoop
 from app.models.db.job import Job
 from app.models.db.source import Source
 from app.models.db.processing_configuration import ProcessingConfiguration
-from app.models.domain.inference_schema import InferenceResponseSchema
+from app.models.domain.inference_schema import (
+    InferenceResponseSchema,
+    TargetSelectionSchema,
+    TargetMappingSchema
+)
 from app.services.metadata_service import (
     generate_llm_optimized_json,
     generate_target_llm_optimized_json
@@ -66,56 +70,7 @@ async def infer_target_landing_zone(
     stage = start_stage(job_uuid, "Target Inference", db)
 
     try:
-        results = []
-        predefined_single = False
-        if is_predefined:
-            target_uuids = []
-            for tid in predefined_ids:
-                try:
-                    target_uuids.append(UUID(str(tid)))
-                except ValueError:
-                    pass
-            stmt = select(TargetCatalog).where(TargetCatalog.target_id.in_(target_uuids))
-            db_targets = db.execute(stmt).scalars().all()
-            if db_targets:
-                results = [(t, 1.0) for t in db_targets]
-                if len(db_targets) == 1:
-                    predefined_single = True
-                logger.info(f"Using {len(results)} predefined target candidates.")
-            else:
-                logger.warning("Predefined target IDs provided but none found in database. Falling back to semantic search.")
-
-        if not results:
-            if profile.source_embedding is None:
-                raise ValueError("Cannot perform semantic search: source embedding is missing.")
-            distance_expr = TargetCatalog.target_embedding.cosine_distance(profile.source_embedding)
-            stmt = (
-                select(TargetCatalog, (1.0 - distance_expr).label("similarity"))
-                .where(TargetCatalog.target_embedding.is_not(None))
-                .order_by(distance_expr)
-                .limit(settings.TARGET_INFERENCE_TOP_K)
-            )
-            results = db.execute(stmt).all()
-            logger.info(f"Retrieved {len(results)} candidate targets from TargetCatalog via semantic search.")
-
-        # 3. Format context for prompt
         source_json = generate_llm_optimized_json(profile.metadata_json)
-        
-        candidates_context = []
-        for idx, (target, similarity) in enumerate(results, 1):
-            target_json = generate_target_llm_optimized_json(target)
-            candidates_context.append(
-                f"Candidate {idx}\n"
-                f"Similarity: {similarity:.4f}\n"
-                f"Target ID: {target.target_id}\n"
-                f"Target Name: {target.target_name}\n"
-                f"Business Domain: {target.business_domain or 'General'}\n"
-                f"Description: {target.description or 'No description'}\n"
-                f"Schema Fields:\n{json.dumps(target_json['fields'], indent=2)}\n"
-                f"----------------------------------------"
-            )
-
-        candidates_str = "\n".join(candidates_context)
 
         # Query database for stage-specific feedback
         feedback_records = db.scalars(
@@ -136,62 +91,218 @@ async def infer_target_landing_zone(
             ]
             if feedback_lines:
                 feedback_prompt_part = "\n\nHuman Engineering Feedback Guidelines:\n" + "\n".join(feedback_lines)
-        
-        prompt = (
-            "Analyze the incoming source dataset's metadata schema and determine "
-            "which of the provided candidate database tables is the best target landing zone for it.\n\n"
-            "Incoming Source Dataset Schema:\n"
-            f"{json.dumps(source_json, indent=2)}\n\n"
-            "Candidate Target Databases (Top 7 Retrieved via Semantic Search):\n"
-            f"{candidates_str}"
-            f"{feedback_prompt_part}\n\n"
-            "Instructions:\n"
 
-            "1. Evaluate candidates using the following priority order:\n"
-            "   - Business meaning and semantic purpose of the dataset.\n"
-            "   - Column name alignment.\n"
-            "   - Schema coverage (percentage of source columns that can be mapped).\n"
-            "   - Data type compatibility.\n"
-            "   - Retrieval similarity score.\n"
-            "   - Candidate descriptions and domain metadata.\n\n"
-            "2. Retrieval-Awareness context:\n"
-            "   - Candidates were pre-selected using vector similarity search.\n"
-            "   - The correct target, if it exists, is likely among the provided candidates.\n"
-            "   - Similarity scores should be considered as supporting evidence, not as the sole decision factor.\n\n"
-            "3. Schema Coverage Analysis:\n"
-            "   - Determine how many source columns can be mapped. Prefer candidates with higher mapping coverage.\n"
-            "   - Identify unmapped source fields and missing target fields.\n\n"
-            "4. Reasoning Requirements (intended for audit/debugging only, keep concise):\n"
-            "   - Explain why the selected target was chosen.\n"
-            "   - Highlight any major schema compatibility concerns, major datatype compatibility concerns, or significant coverage gaps.\n"
-            "   - Do NOT perform extensive runner-up comparison or detailed rejection analysis for every candidate.\n\n"
-            "5. No-Match Handling:\n"
-            "   - If no candidate is sufficiently compatible, return selected_target_id = null, column_mapping = null, and explain why in reasoning.\n"
-            "   - The confidence_score should reflect your actual certainty in this assessment.\n"
-            "   - Do NOT try to force-map every source column. If a source column has no matching counterpart in the selected target schema, map it to null.\n\n"
-            "6. Partitioning Recommendations:\n"
-            "   - Analyze the source columns (e.g. timestamps, transaction dates, high-cardinality category IDs) and suggest a partition key and strategy (e.g. Partition monthly on transaction_date), or null if not applicable.\n\n"
-            "7. Naming Convention suggestions:\n"
-            "   - Reconcile source column names with standard target casing conventions (e.g. converting CamelCase/PascalCase to snake_case for PostgreSQL targets, stripping spaces/special characters, and escaping SQL keywords). Map raw source name -> suggested name.\n\n"
-            "8. Your response MUST be valid JSON adhering exactly to the schema."
-        )
-
-        # 4. Invoke LLM Provider
         llm_provider = get_llm_provider()
-        logger.info(f"Full Target Inference Prompt:\n{prompt}")
-        logger.info("Sending prompt to generative LLM provider.")
-        response_text = await llm_provider.generate_response(
-            prompt=prompt,
-            response_schema=InferenceResponseSchema
-        )
-        logger.info(f"Raw LLM Structured Response:\n{response_text}")
-        
-        # Parse output
-        res_json = json.loads(response_text)
-        confidence = float(res_json.get("confidence_score", 0.0))
+
+        # Resolve predefined targets if config contains any
+        db_targets = []
+        if predefined_ids:
+            target_uuids = []
+            for tid in predefined_ids:
+                try:
+                    target_uuids.append(UUID(str(tid)))
+                except ValueError:
+                    pass
+            if target_uuids:
+                stmt = select(TargetCatalog).where(TargetCatalog.target_id.in_(target_uuids))
+                db_targets = list(db.execute(stmt).scalars().all())
+
+        predefined_single = (len(db_targets) == 1)
+
+        # Case 1: Predefined Single Target - Bypass selection, go straight to mapping pass
         if predefined_single:
-            logger.info("Single predefined target candidate used. Overriding confidence to 1.0.")
+            selected_target = db_targets[0]
+            selected_target_id_str = str(selected_target.target_id)
             confidence = 1.0
+            selection_reasoning = "Using predefined single target candidate from configuration."
+            logger.info(f"Case 1: Single predefined target candidate used: {selected_target_id_str}")
+
+            target_json = generate_target_llm_optimized_json(selected_target)
+            prompt_mapping = (
+                "Map the incoming source dataset schema to the selected target database table schema.\n\n"
+                "Source Schema:\n"
+                f"{json.dumps(source_json, indent=2)}\n\n"
+                "Selected Target Table:\n"
+                f"Target ID: {selected_target.target_id}\n"
+                f"Target Name: {selected_target.target_name}\n"
+                f"Description: {selected_target.description or 'No description'}\n"
+                f"Schema Fields:\n{json.dumps(target_json['fields'], indent=2)}\n"
+                f"{feedback_prompt_part}\n\n"
+                "Instructions & Constraints:\n"
+                "1. Column Mapping: Map source columns to target columns. Map to null if unmatched. Only use explicitly defined target schema fields.\n"
+                "2. Coverage: Identify unmapped source columns ('unmapped_source_columns') and missing target columns ('missing_target_columns').\n"
+                "3. Partitioning: Recommend column/strategy ONLY if a date, timestamp, or high-cardinality ID field exists in source. Otherwise return null.\n"
+                "4. Casing: Suggest standard naming adjustments to reconcile source names with target conventions (e.g. lowercase snake_case for PostgreSQL).\n"
+                "5. STRICT BOUNDARIES: Do NOT perform target selection or compare tables. Assume the provided target is correct. Explain mapping/partition decisions in 'reasoning' in under 3 sentences.\n"
+                "6. Your response MUST be valid JSON adhering exactly to the TargetMappingSchema."
+            )
+
+            logger.info(f"Sending mapping pass prompt to LLM:\n{prompt_mapping}")
+            mapping_response = await llm_provider.generate_response(
+                prompt=prompt_mapping,
+                response_schema=TargetMappingSchema
+            )
+            logger.info(f"Raw LLM Structured Mapping Response:\n{mapping_response}")
+            mapping_json = json.loads(mapping_response)
+
+            res_json = {
+                "selected_target_id": selected_target_id_str,
+                "confidence_score": confidence,
+                "reasoning": f"Selection Reason: {selection_reasoning}\nMapping Details: {mapping_json.get('reasoning', '')}",
+                "column_mapping": mapping_json.get("column_mapping"),
+                "unmapped_source_columns": mapping_json.get("unmapped_source_columns", []),
+                "missing_target_columns": mapping_json.get("missing_target_columns", []),
+                "partitioning_recommendation": mapping_json.get("partitioning_recommendation"),
+                "naming_convention_suggestions": mapping_json.get("naming_convention_suggestions")
+            }
+
+        else:
+            # Determine candidates: Predefined Multiple vs Semantic Search
+            candidates = []
+            if db_targets:
+                # Case 2: Predefined multiple targets (Skip semantic search)
+                candidates = db_targets
+                logger.info(f"Case 2: Resolving from {len(candidates)} predefined target candidates.")
+            else:
+                # Case 3: No predefined targets / Semantic Search
+                if profile.source_embedding is None:
+                    raise ValueError("Cannot perform semantic search: source embedding is missing.")
+                distance_expr = TargetCatalog.target_embedding.cosine_distance(profile.source_embedding)
+                stmt = (
+                    select(TargetCatalog, (1.0 - distance_expr).label("similarity"))
+                    .where(TargetCatalog.target_embedding.is_not(None))
+                    .order_by(distance_expr)
+                    .limit(settings.TARGET_INFERENCE_TOP_K)
+                )
+                search_results = db.execute(stmt).all()
+                candidates = [row[0] for row in search_results]
+                logger.info(f"Case 3: Retrieved {len(candidates)} candidate targets via semantic search.")
+
+            if not candidates:
+                logger.warning("No candidate targets found. Skipping selection.")
+                res_json = {
+                    "selected_target_id": None,
+                    "confidence_score": 0.0,
+                    "reasoning": "No candidate targets found.",
+                    "column_mapping": None,
+                    "unmapped_source_columns": [],
+                    "missing_target_columns": [],
+                    "partitioning_recommendation": None,
+                    "naming_convention_suggestions": None
+                }
+            else:
+                # Pass 1: Selection Prompt
+                candidates_context = []
+                for idx, target in enumerate(candidates, 1):
+                    target_json = generate_target_llm_optimized_json(target)
+                    candidates_context.append(
+                        f"Candidate {idx}\n"
+                        f"Target ID: {target.target_id}\n"
+                        f"Target Name: {target.target_name}\n"
+                        f"Business Domain: {target.business_domain or 'General'}\n"
+                        f"Description: {target.description or 'No description'}\n"
+                        f"Schema Fields:\n{json.dumps(target_json['fields'], indent=2)}\n"
+                        f"----------------------------------------"
+                    )
+                candidates_str = "\n".join(candidates_context)
+
+                prompt_selection = (
+                    "Evaluate candidate database tables and select the most apt target landing zone for the incoming source dataset schema.\n\n"
+                    "Source Schema:\n"
+                    f"{json.dumps(source_json, indent=2)}\n\n"
+                    "Candidate Target Tables:\n"
+                    f"{candidates_str}"
+                    f"{feedback_prompt_part}\n\n"
+                    "Instructions & Constraints:\n"
+                    "1. Evaluate by: semantic meaning, column name alignment, schema coverage, data type compatibility, and similarity score to select the most apt target table.\n"
+                    "2. Retrieval-Awareness: Candidates are pre-selected via vector similarity. Consider scores as supporting evidence, not the sole decision factor.\n"
+                    "3. No-Match Handling: If no candidate is compatible, return selected_target_id = null. Do not force a match.\n"
+                    "4. STRICT BOUNDARIES: Do NOT generate column mappings, unmapped/missing column lists, partitioning recommendations, or casing suggestions. Explain your selection in 'reasoning' in under 3 sentences.\n"
+                    "5. Your response MUST be valid JSON adhering exactly to the TargetSelectionSchema."
+                )
+
+                logger.info(f"Sending selection pass prompt to LLM:\n{prompt_selection}")
+                selection_response = await llm_provider.generate_response(
+                    prompt=prompt_selection,
+                    response_schema=TargetSelectionSchema
+                )
+                logger.info(f"Raw LLM Structured Selection Response:\n{selection_response}")
+                selection_json = json.loads(selection_response)
+
+                selected_target_id_str = selection_json.get("selected_target_id")
+                if selected_target_id_str in (None, "", "null", "None"):
+                    selected_target_id_str = None
+
+                confidence = float(selection_json.get("confidence_score", 0.0))
+                selection_reasoning = selection_json.get("reasoning", "No selection reasoning provided.")
+
+                selected_target = None
+                if selected_target_id_str:
+                    try:
+                        selected_uuid = UUID(selected_target_id_str)
+                    except ValueError:
+                        raise RuntimeError(f"LLM Hallucination: selected target ID '{selected_target_id_str}' is not a valid UUID format.")
+                    
+                    selected_target = next((t for t in candidates if t.target_id == selected_uuid), None)
+                    if not selected_target:
+                        selected_target = db.get(TargetCatalog, selected_uuid)
+                        if not selected_target:
+                            raise RuntimeError(f"LLM Hallucination: selected target ID '{selected_target_id_str}' was not found in the database catalog.")
+
+                if selected_target:
+                    # Pass 2: Mapping prompt
+                    target_json = generate_target_llm_optimized_json(selected_target)
+                    prompt_mapping = (
+                        "Map the incoming source dataset schema to the selected target database table schema.\n\n"
+                        "Source Schema:\n"
+                        f"{json.dumps(source_json, indent=2)}\n\n"
+                        "Selected Target Table:\n"
+                        f"Target ID: {selected_target.target_id}\n"
+                        f"Target Name: {selected_target.target_name}\n"
+                        f"Description: {selected_target.description or 'No description'}\n"
+                        f"Schema Fields:\n{json.dumps(target_json['fields'], indent=2)}\n"
+                        f"{feedback_prompt_part}\n\n"
+                        "Instructions & Constraints:\n"
+                        "1. Column Mapping: Map source columns to target columns. Map to null if unmatched. Only use explicitly defined target schema fields.\n"
+                        "2. Coverage: Identify unmapped source columns ('unmapped_source_columns') and missing target columns ('missing_target_columns').\n"
+                        "3. Partitioning: Recommend column/strategy ONLY if a date, timestamp, or high-cardinality ID field exists in source. Otherwise return null.\n"
+                        "4. Casing: Suggest standard naming adjustments to reconcile source names with target conventions (e.g. lowercase snake_case for PostgreSQL).\n"
+                        "5. STRICT BOUNDARIES: Do NOT perform target selection or compare tables. Assume the provided target is correct. Explain mapping/partition decisions in 'reasoning' in under 3 sentences.\n"
+                        "6. Your response MUST be valid JSON adhering exactly to the TargetMappingSchema."
+                    )
+
+                    logger.info(f"Sending mapping pass prompt to LLM:\n{prompt_mapping}")
+                    mapping_response = await llm_provider.generate_response(
+                        prompt=prompt_mapping,
+                        response_schema=TargetMappingSchema
+                    )
+                    logger.info(f"Raw LLM Structured Mapping Response:\n{mapping_response}")
+                    mapping_json = json.loads(mapping_response)
+
+                    res_json = {
+                        "selected_target_id": selected_target_id_str,
+                        "confidence_score": confidence,
+                        "reasoning": f"Selection Reason: {selection_reasoning}\nMapping Details: {mapping_json.get('reasoning', '')}",
+                        "column_mapping": mapping_json.get("column_mapping"),
+                        "unmapped_source_columns": mapping_json.get("unmapped_source_columns", []),
+                        "missing_target_columns": mapping_json.get("missing_target_columns", []),
+                        "partitioning_recommendation": mapping_json.get("partitioning_recommendation"),
+                        "naming_convention_suggestions": mapping_json.get("naming_convention_suggestions")
+                    }
+                else:
+                    # Target selection returned null or target not found
+                    res_json = {
+                        "selected_target_id": None,
+                        "confidence_score": confidence,
+                        "reasoning": f"Selection Reason: {selection_reasoning}",
+                        "column_mapping": None,
+                        "unmapped_source_columns": [],
+                        "missing_target_columns": [],
+                        "partitioning_recommendation": None,
+                        "naming_convention_suggestions": None
+                    }
+
+        confidence = float(res_json.get("confidence_score", 0.0))
         selected_target_id_str = res_json.get("selected_target_id")
         reasoning = res_json.get("reasoning", "No reasoning provided.")
         column_mapping = res_json.get("column_mapping")
@@ -199,7 +310,7 @@ async def infer_target_landing_zone(
         missing_target = res_json.get("missing_target_columns", [])
         partitioning_rec = res_json.get("partitioning_recommendation")
         naming_suggestions = res_json.get("naming_convention_suggestions")
-        
+
         requires_review = confidence < settings.INFERENCE_CONFIDENCE_THRESHOLD
         if predefined_single:
             requires_review = False

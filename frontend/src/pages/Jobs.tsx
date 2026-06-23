@@ -149,6 +149,7 @@ export const Jobs: React.FC<JobsProps> = ({ setActiveTab }) => {
   const [activeGraphDetails, setActiveGraphDetails] = useState<JobDetailsResponse | null>(null);
   const [selectedGraphArtifactId, setSelectedGraphArtifactId] = useState<string | null>(null);
   const [selectedGraphNode, setSelectedGraphNode] = useState<string | null>('source');
+  const [zoomScale, setZoomScale] = useState<number>(1.0);
 
   // Triggering actions loading states
   const [actioningJobId, setActioningJobId] = useState<string | null>(null);
@@ -348,37 +349,98 @@ export const Jobs: React.FC<JobsProps> = ({ setActiveTab }) => {
       return '#f59e0b';
     };
 
-    const getInferenceStatusColor = () => {
-      if (!artLineage.inference) return '#71717a';
-      return artLineage.inference.confidence_score >= 0.7 ? '#10b981' : '#f59e0b';
+    const getInferenceStatusColor = (art: ArtifactLineageDetails) => {
+      if (!art.inference) return '#71717a';
+      return art.inference.confidence_score >= 0.7 ? '#10b981' : '#f59e0b';
     };
 
-    const getValidationStatusColor = () => {
-      if (!artLineage.validation) return '#71717a';
-      return artLineage.validation.validation_status === 'VALID' ? '#10b981' : '#ef4444';
+    const getValidationStatusColor = (art: ArtifactLineageDetails) => {
+      if (!art.validation) return '#71717a';
+      return art.validation.validation_status === 'VALID' ? '#10b981' : '#ef4444';
     };
 
-    const getDriftStatusColor = () => {
-      if (!artLineage.drift) return '#71717a';
-      const status = artLineage.drift.drift_status?.toUpperCase();
+    const getDriftStatusColor = (art: ArtifactLineageDetails) => {
+      if (!art.drift) return '#71717a';
+      const status = art.drift.drift_status?.toUpperCase();
       if (status === 'NO_DRIFT') return '#10b981';
       if (status === 'CRITICAL') return '#ef4444';
       return '#f59e0b';
     };
 
-    const getFinalStatusColor = () => {
-      if (artLineage.fallback) {
-        const st = artLineage.fallback.request_status?.toUpperCase();
+    const getFinalStatusColor = (art: ArtifactLineageDetails) => {
+      if (art.fallback) {
+        const st = art.fallback.request_status?.toUpperCase();
         if (st === 'APPROVED') return '#10b981';
         if (st === 'REJECTED') return '#ef4444';
         return '#f59e0b';
       }
-      if (artLineage.recommendation) {
-        const st = artLineage.recommendation.recommendation_status?.toUpperCase();
+      if (art.recommendation) {
+        const st = art.recommendation.recommendation_status?.toUpperCase();
         if (st === 'COMPLETED') return '#10b981';
         return '#f59e0b';
       }
-      return artLineage.target ? '#10b981' : '#71717a';
+      return art.target ? '#10b981' : '#71717a';
+    };
+
+    const getExtractionStatusColor = (art: ArtifactLineageDetails) => {
+      if (art.artifact_metadata) return '#10b981';
+      if (art.status?.toUpperCase() === 'FAILED' && !art.inference) return '#ef4444';
+      const acqLog = activeGraphDetails.stages?.find(s => s.stage_name.toLowerCase() === 'dataset acquisition');
+      if (acqLog && acqLog.status === 'COMPLETED') return '#0ea5e9';
+      return '#71717a';
+    };
+
+    const getVectorizationStatusColor = (art: ArtifactLineageDetails) => {
+      if (art.inference) return '#10b981';
+      if (art.status?.toUpperCase() === 'FAILED' && art.artifact_metadata && !art.inference) return '#ef4444';
+      if (art.artifact_metadata) return '#0ea5e9';
+      return '#71717a';
+    };
+
+    const getStageAttemptCount = (stageDbName: string): number => {
+      let count = 0;
+      if (activeGraphDetails.stages) {
+        count += activeGraphDetails.stages.filter(
+          (s) => s.stage_name.toLowerCase() === stageDbName.toLowerCase()
+        ).length;
+      }
+      let parent: ParentJobSummary | null | undefined = activeGraphDetails.parent_job;
+      while (parent) {
+        if (parent.stages) {
+          count += parent.stages.filter(
+            (s) => s.stage_name.toLowerCase() === stageDbName.toLowerCase()
+          ).length;
+        }
+        parent = parent.parent_job;
+      }
+      return count;
+    };
+
+    const renderRetryBadge = (stageDbName: string) => {
+      const attempts = getStageAttemptCount(stageDbName);
+      if (attempts > 1) {
+        return (
+          <span
+            style={{
+              marginLeft: '6px',
+              fontSize: '9px',
+              backgroundColor: 'rgba(245, 158, 11, 0.12)',
+              color: '#f59e0b',
+              border: '1px solid rgba(245, 158, 11, 0.25)',
+              padding: '1px 4px',
+              borderRadius: '3px',
+              fontWeight: 700,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '2px',
+            }}
+            title={`Executed ${attempts} times across all run retries`}
+          >
+            <span>↻</span> Retry #{attempts - 1}
+          </span>
+        );
+      }
+      return null;
     };
 
     const targetNameStr = artLineage.target?.target_name || artLineage.inference?.matched_target_table || 'Unassigned Catalog';
@@ -445,231 +507,472 @@ export const Jobs: React.FC<JobsProps> = ({ setActiveTab }) => {
               backgroundColor: '#09090b',
               border: '1px solid #27272a',
               borderRadius: '8px',
-              padding: '30px',
+              padding: '24px',
+              position: 'relative',
+              overflow: 'auto',
+              minHeight: '500px',
               display: 'flex',
               flexDirection: 'column',
-              justifyContent: 'center',
-              alignItems: 'center',
-              position: 'relative',
-              overflowY: 'auto',
-              minHeight: '500px',
             }}
           >
             {/* Legend */}
-            <div style={{ position: 'absolute', top: '16px', left: '16px', display: 'flex', gap: '16px', fontSize: '11px', color: '#71717a' }}>
+            <div style={{ position: 'absolute', top: '16px', left: '16px', display: 'flex', gap: '16px', fontSize: '11px', color: '#71717a', zIndex: 5 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981' }} /> Passed</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#f59e0b' }} /> Requires Review / Drift</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#ef4444' }} /> Failed / Rejected</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#71717a' }} /> Pending</div>
             </div>
 
-            {/* Nodes Stack */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', width: '100%', maxWidth: '360px' }}>
-              
-              {/* Node 0: Parent attempt (if any) */}
-              {activeGraphDetails.parent_job && (
-                <>
-                  <div
-                    onClick={() => setSelectedGraphNode('parent')}
-                    style={{
-                      width: '100%',
-                      backgroundColor: selectedGraphNode === 'parent' ? 'rgba(239, 68, 68, 0.05)' : '#18181b',
-                      border: `1px solid ${selectedGraphNode === 'parent' ? '#ef4444' : '#27272a'}`,
-                      borderRadius: '8px',
-                      padding: '16px',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                      boxShadow: selectedGraphNode === 'parent' ? '0 0 12px rgba(239, 68, 68, 0.2)' : 'none',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '10px', fontWeight: 600, color: getParentStatusColor(), textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                        Parent Run (Attempt 1)
-                      </span>
-                      <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: getParentStatusColor() }} />
-                    </div>
-                    <h4 style={{ fontSize: '13px', fontWeight: 600, color: '#fafafa', marginTop: '6px' }}>
-                      Previous Job attempt
-                    </h4>
-                    <span style={{ fontSize: '11px', color: '#71717a', display: 'block', fontFamily: 'monospace', marginTop: '4px' }}>
-                      {activeGraphDetails.parent_job.job_id.substring(0, 8)}...
-                    </span>
-                  </div>
-                  <div style={{ height: '20px', width: '2px', backgroundColor: '#27272a', position: 'relative' }}>
-                    <div style={{ position: 'absolute', bottom: '-4px', left: '-3px', width: '8px', height: '8px', borderRight: '2px solid #27272a', borderBottom: '2px solid #27272a', transform: 'rotate(45deg)' }} />
-                  </div>
-                </>
-              )}
-
-              {/* Node 1: Source file ingestion */}
-              <div
-                onClick={() => setSelectedGraphNode('source')}
+            {/* Zoom Controls */}
+            <div
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                zIndex: 10,
+                display: 'flex',
+                gap: '6px',
+                alignItems: 'center',
+                backgroundColor: '#18181b',
+                border: '1px solid #27272a',
+                padding: '4px 8px',
+                borderRadius: '6px',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)',
+              }}
+            >
+              <button
+                onClick={() => setZoomScale((s) => Math.max(0.4, s - 0.1))}
                 style={{
-                  width: '100%',
-                  backgroundColor: selectedGraphNode === 'source' ? 'rgba(14, 165, 233, 0.05)' : '#18181b',
-                  border: `1px solid ${selectedGraphNode === 'source' ? '#0ea5e9' : '#27272a'}`,
-                  borderRadius: '8px',
-                  padding: '16px',
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  color: '#a1a1aa',
                   cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                  boxShadow: selectedGraphNode === 'source' ? '0 0 12px rgba(14, 165, 233, 0.2)' : 'none',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  padding: '2px 6px',
                 }}
+                title="Zoom Out"
               >
-                <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '10px', fontWeight: 600, color: '#0ea5e9', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Stage 1: Source File Ingestion
-                  </span>
-                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: artLineage.status === 'PROCESSED' ? '#10b981' : artLineage.status === 'FAILED' ? '#ef4444' : '#71717a' }} />
-                </div>
-                <h4 style={{ fontSize: '13px', fontWeight: 600, color: '#fafafa', marginTop: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {artLineage.artifact_name}
-                </h4>
-                <span style={{ fontSize: '11px', color: '#71717a', display: 'block', marginTop: '4px' }}>
-                  Status: {artLineage.status}
-                </span>
-              </div>
-
-              {/* Connecting line */}
-              <div style={{ height: '20px', width: '2px', backgroundColor: '#27272a', position: 'relative' }}>
-                <div style={{ position: 'absolute', bottom: '-4px', left: '-3px', width: '8px', height: '8px', borderRight: '2px solid #27272a', borderBottom: '2px solid #27272a', transform: 'rotate(45deg)' }} />
-              </div>
-
-              {/* Node 2: LLM Inference */}
-              <div
-                onClick={() => artLineage.inference && setSelectedGraphNode('inference')}
+                -
+              </button>
+              <span style={{ fontSize: '11px', color: '#fafafa', minWidth: '36px', textAlign: 'center', fontFamily: 'monospace' }}>
+                {Math.round(zoomScale * 100)}%
+              </span>
+              <button
+                onClick={() => setZoomScale((s) => Math.min(1.6, s + 0.1))}
                 style={{
-                  width: '100%',
-                  backgroundColor: !artLineage.inference ? '#09090b' : (selectedGraphNode === 'inference' ? 'rgba(139, 92, 246, 0.05)' : '#18181b'),
-                  border: `1px solid ${!artLineage.inference ? '#1f1f23' : (selectedGraphNode === 'inference' ? '#8b5cf6' : '#27272a')}`,
-                  borderRadius: '8px',
-                  padding: '16px',
-                  cursor: artLineage.inference ? 'pointer' : 'not-allowed',
-                  opacity: artLineage.inference ? 1 : 0.4,
-                  transition: 'all 0.15s ease',
-                  boxShadow: selectedGraphNode === 'inference' ? '0 0 12px rgba(139, 92, 246, 0.2)' : 'none',
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  color: '#a1a1aa',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  padding: '2px 6px',
                 }}
+                title="Zoom In"
               >
-                <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '10px', fontWeight: 600, color: '#8b5cf6', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Stage 2: LLM Target Selection
-                  </span>
-                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: getInferenceStatusColor() }} />
-                </div>
-                <h4 style={{ fontSize: '13px', fontWeight: 600, color: '#fafafa', marginTop: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {artLineage.inference ? `Matched: ${targetNameStr}` : 'Inference Pending'}
-                </h4>
-                <span style={{ fontSize: '11px', color: '#71717a', display: 'block', marginTop: '4px' }}>
-                  {artLineage.inference ? `Confidence: ${Math.round(artLineage.inference.confidence_score * 100)}%` : 'Inference not run'}
-                </span>
-              </div>
-
-              {/* Connecting line */}
-              <div style={{ height: '20px', width: '2px', backgroundColor: '#27272a', position: 'relative' }}>
-                <div style={{ position: 'absolute', bottom: '-4px', left: '-3px', width: '8px', height: '8px', borderRight: '2px solid #27272a', borderBottom: '2px solid #27272a', transform: 'rotate(45deg)' }} />
-              </div>
-
-              {/* Node 3: Validation */}
-              <div
-                onClick={() => artLineage.validation && setSelectedGraphNode('validation')}
+                +
+              </button>
+              <button
+                onClick={() => setZoomScale(1.0)}
                 style={{
-                  width: '100%',
-                  backgroundColor: !artLineage.validation ? '#09090b' : (selectedGraphNode === 'validation' ? 'rgba(16, 185, 129, 0.05)' : '#18181b'),
-                  border: `1px solid ${!artLineage.validation ? '#1f1f23' : (selectedGraphNode === 'validation' ? '#10b981' : '#27272a')}`,
-                  borderRadius: '8px',
-                  padding: '16px',
-                  cursor: artLineage.validation ? 'pointer' : 'not-allowed',
-                  opacity: artLineage.validation ? 1 : 0.4,
-                  transition: 'all 0.15s ease',
-                  boxShadow: selectedGraphNode === 'validation' ? '0 0 12px rgba(16, 185, 129, 0.2)' : 'none',
+                  backgroundColor: '#27272a',
+                  border: 'none',
+                  color: '#fafafa',
+                  cursor: 'pointer',
+                  fontSize: '10px',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
                 }}
+                title="Reset Zoom"
               >
-                <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '10px', fontWeight: 600, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Stage 3: Schema validation
-                  </span>
-                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: getValidationStatusColor() }} />
-                </div>
-                <h4 style={{ fontSize: '13px', fontWeight: 600, color: '#fafafa', marginTop: '6px' }}>
-                  {artLineage.validation ? `Status: ${artLineage.validation.validation_status}` : 'Validation Pending'}
-                </h4>
-                <span style={{ fontSize: '11px', color: '#71717a', display: 'block', marginTop: '4px' }}>
-                  {artLineage.validation ? `Match Score: ${Math.round(artLineage.validation.target_match_percentage)}%` : 'Validation not run'}
-                </span>
-              </div>
+                Reset
+              </button>
+            </div>
 
-              {/* Connecting line */}
-              <div style={{ height: '20px', width: '2px', backgroundColor: '#27272a', position: 'relative' }}>
-                <div style={{ position: 'absolute', bottom: '-4px', left: '-3px', width: '8px', height: '8px', borderRight: '2px solid #27272a', borderBottom: '2px solid #27272a', transform: 'rotate(45deg)' }} />
-              </div>
-
-              {/* Node 4: Drift */}
+            {/* Scrollable Spacer Container */}
+            <div
+              style={{
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'flex-start',
+                minWidth: `${activeGraphDetails.artifacts.length * 280 * zoomScale}px`,
+                minHeight: `${750 * zoomScale}px`,
+                marginTop: '40px',
+              }}
+            >
               <div
-                onClick={() => artLineage.drift && setSelectedGraphNode('drift')}
                 style={{
-                  width: '100%',
-                  backgroundColor: !artLineage.drift ? '#09090b' : (selectedGraphNode === 'drift' ? 'rgba(245, 158, 11, 0.05)' : '#18181b'),
-                  border: `1px solid ${!artLineage.drift ? '#1f1f23' : (selectedGraphNode === 'drift' ? '#f59e0b' : '#27272a')}`,
-                  borderRadius: '8px',
-                  padding: '16px',
-                  cursor: artLineage.drift ? 'pointer' : 'not-allowed',
-                  opacity: artLineage.drift ? 1 : 0.4,
-                  transition: 'all 0.15s ease',
-                  boxShadow: selectedGraphNode === 'drift' ? '0 0 12px rgba(245, 158, 11, 0.2)' : 'none',
+                  transform: `scale(${zoomScale})`,
+                  transformOrigin: 'top center',
+                  transition: 'transform 0.15s ease-out',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  width: `${activeGraphDetails.artifacts.length * 280}px`,
                 }}
               >
-                <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '10px', fontWeight: 600, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Stage 4: Schema Drift Check
+                {/* Node 0: Parent attempt (if any) */}
+                {activeGraphDetails.parent_job && (
+                  <>
+                    <div
+                      onClick={() => setSelectedGraphNode('parent')}
+                      style={{
+                        width: '320px',
+                        backgroundColor: selectedGraphNode === 'parent' ? 'rgba(239, 68, 68, 0.05)' : '#18181b',
+                        border: `1px solid ${selectedGraphNode === 'parent' ? '#ef4444' : '#27272a'}`,
+                        borderRadius: '8px',
+                        padding: '16px',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        boxShadow: selectedGraphNode === 'parent' ? '0 0 12px rgba(239, 68, 68, 0.2)' : 'none',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '10px', fontWeight: 600, color: getParentStatusColor(), textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Parent Run (Attempt 1)
+                        </span>
+                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: getParentStatusColor() }} />
+                      </div>
+                      <h4 style={{ fontSize: '13px', fontWeight: 600, color: '#fafafa', marginTop: '6px' }}>
+                        Previous Job attempt
+                      </h4>
+                      <span style={{ fontSize: '11px', color: '#71717a', display: 'block', fontFamily: 'monospace', marginTop: '4px' }}>
+                        {activeGraphDetails.parent_job.job_id.substring(0, 8)}...
+                      </span>
+                    </div>
+                    <div style={{ height: '20px', width: '2px', backgroundColor: '#27272a', position: 'relative' }}>
+                      <div style={{ position: 'absolute', bottom: '-4px', left: '-3px', width: '8px', height: '8px', borderRight: '2px solid #27272a', borderBottom: '2px solid #27272a', transform: 'rotate(45deg)' }} />
+                    </div>
+                  </>
+                )}
+
+                {/* Node 1: Ingestion Shared Root (Dataset Ingestion) */}
+                <div
+                  onClick={() => setSelectedGraphNode('source')}
+                  style={{
+                    width: '320px',
+                    backgroundColor: selectedGraphNode === 'source' ? 'rgba(14, 165, 233, 0.05)' : '#18181b',
+                    border: `1px solid ${selectedGraphNode === 'source' ? '#0ea5e9' : '#27272a'}`,
+                    borderRadius: '8px',
+                    padding: '16px',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    boxShadow: selectedGraphNode === 'source' ? '0 0 12px rgba(14, 165, 233, 0.2)' : 'none',
+                    textAlign: 'center',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '10px', fontWeight: 600, color: '#0ea5e9', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center' }}>
+                      Stage 1: Dataset Ingestion
+                      {renderRetryBadge('Dataset Acquisition')}
+                    </span>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981' }} />
+                  </div>
+                  <h4 style={{ fontSize: '13px', fontWeight: 600, color: '#fafafa', marginTop: '6px' }}>
+                    Dataset Acquisition Triggered
+                  </h4>
+                  <span style={{ fontSize: '11px', color: '#71717a', display: 'block', marginTop: '4px' }}>
+                    Job: {activeGraphDetails.job.job_id.substring(0, 8)}...
                   </span>
-                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: getDriftStatusColor() }} />
                 </div>
-                <h4 style={{ fontSize: '13px', fontWeight: 600, color: '#fafafa', marginTop: '6px' }}>
-                  {artLineage.drift ? `Drift Status: ${artLineage.drift.drift_status}` : 'Drift Check Pending'}
-                </h4>
-                <span style={{ fontSize: '11px', color: '#71717a', display: 'block', marginTop: '4px' }}>
-                  {artLineage.drift ? `Drift Score: ${Math.round(artLineage.drift.drift_score)}%` : 'Drift not evaluated'}
-                </span>
-              </div>
 
-              {/* Connecting line */}
-              <div style={{ height: '20px', width: '2px', backgroundColor: '#27272a', position: 'relative' }}>
-                <div style={{ position: 'absolute', bottom: '-4px', left: '-3px', width: '8px', height: '8px', borderRight: '2px solid #27272a', borderBottom: '2px solid #27272a', transform: 'rotate(45deg)' }} />
-              </div>
+                {/* SVG Branch Connectors Canvas */}
+                <svg width="100%" height="40" style={{ display: 'block' }}>
+                  {activeGraphDetails.artifacts.map((art, idx) => {
+                    const N = activeGraphDetails.artifacts.length;
+                    const xStart = '50%';
+                    const xEnd = `${((idx + 0.5) / N) * 100}%`;
+                    return (
+                      <line
+                        key={art.artifact_id}
+                        x1={xStart}
+                        y1="0"
+                        x2={xEnd}
+                        y2="100%"
+                        stroke="#27272a"
+                        strokeWidth="2"
+                      />
+                    );
+                  })}
+                </svg>
 
-              {/* Node 5: Outcome */}
-              <div
-                onClick={() => (artLineage.recommendation || artLineage.fallback || artLineage.target) && setSelectedGraphNode('final')}
-                style={{
-                  width: '100%',
-                  backgroundColor: selectedGraphNode === 'final' ? 'rgba(16, 185, 129, 0.05)' : '#18181b',
-                  border: `1px solid ${selectedGraphNode === 'final' ? '#10b981' : '#27272a'}`,
-                  borderRadius: '8px',
-                  padding: '16px',
-                  cursor: (artLineage.recommendation || artLineage.fallback || artLineage.target) ? 'pointer' : 'not-allowed',
-                  transition: 'all 0.15s ease',
-                  boxShadow: selectedGraphNode === 'final' ? '0 0 12px rgba(16, 185, 129, 0.2)' : 'none',
-                }}
-              >
-                <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '10px', fontWeight: 600, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Stage 5: Final Catalog Landing
-                  </span>
-                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: getFinalStatusColor() }} />
+                {/* Columns Row representing parallel file artifacts */}
+                <div style={{ display: 'flex', width: '100%', gap: '20px' }}>
+                  {activeGraphDetails.artifacts.map((art, idx) => {
+                    const isSelectedArtifact = selectedGraphArtifactId === art.artifact_id || (!selectedGraphArtifactId && idx === 0);
+                    
+                    const isSourceSelected = isSelectedArtifact && selectedGraphNode === 'source';
+                    const isExtractionSelected = isSelectedArtifact && selectedGraphNode === 'extraction';
+                    const isVectorizationSelected = isSelectedArtifact && selectedGraphNode === 'vectorization';
+                    const isInferenceSelected = isSelectedArtifact && selectedGraphNode === 'inference';
+                    const isValidationSelected = isSelectedArtifact && selectedGraphNode === 'validation';
+                    const isDriftSelected = isSelectedArtifact && selectedGraphNode === 'drift';
+                    const isFinalSelected = isSelectedArtifact && selectedGraphNode === 'final';
+
+                    const artifactTargetName = art.target?.target_name || art.inference?.matched_target_table || 'Unassigned Catalog';
+
+                    return (
+                      <div
+                        key={art.artifact_id}
+                        style={{
+                          flex: 1,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          minWidth: '250px',
+                        }}
+                      >
+                        {/* Artifact header card */}
+                        <div
+                          onClick={() => {
+                            setSelectedGraphArtifactId(art.artifact_id);
+                            setSelectedGraphNode('source');
+                          }}
+                          style={{
+                            width: '100%',
+                            backgroundColor: isSourceSelected ? 'rgba(14, 165, 233, 0.05)' : '#18181b',
+                            border: `1px solid ${isSourceSelected ? '#0ea5e9' : '#27272a'}`,
+                            borderRadius: '8px',
+                            padding: '12px',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                            boxShadow: isSourceSelected ? '0 0 10px rgba(14, 165, 233, 0.15)' : 'none',
+                          }}
+                        >
+                          <div style={{ fontSize: '9px', fontWeight: 600, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            File Ingestion
+                          </div>
+                          <h5 style={{ fontSize: '12px', fontWeight: 600, color: '#fafafa', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={art.artifact_name}>
+                            {art.artifact_name}
+                          </h5>
+                          <span style={{ fontSize: '10px', color: art.status === 'PROCESSED' ? '#10b981' : art.status === 'FAILED' ? '#ef4444' : '#71717a', display: 'block', marginTop: '2px' }}>
+                            {art.status}
+                          </span>
+                        </div>
+
+                        {/* Node 2: Metadata Extraction */}
+                        {art.artifact_metadata && (
+                          <>
+                            {/* Connector */}
+                            <div style={{ height: '20px', width: '2px', backgroundColor: '#27272a' }} />
+                            <div
+                              onClick={() => {
+                                setSelectedGraphArtifactId(art.artifact_id);
+                                setSelectedGraphNode('extraction');
+                              }}
+                              style={{
+                                width: '100%',
+                                backgroundColor: isExtractionSelected ? 'rgba(168, 85, 247, 0.05)' : '#18181b',
+                                border: `1px solid ${isExtractionSelected ? '#a855f7' : '#27272a'}`,
+                                borderRadius: '8px',
+                                padding: '12px',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                                boxShadow: isExtractionSelected ? '0 0 10px rgba(168, 85, 247, 0.15)' : 'none',
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '9px', fontWeight: 600, color: '#a855f7', textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>
+                                  Stage 2: Extraction
+                                  {renderRetryBadge('Metadata Extraction')}
+                                </span>
+                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: getExtractionStatusColor(art) }} />
+                              </div>
+                              <h6 style={{ fontSize: '11px', fontWeight: 600, color: '#fafafa', marginTop: '4px' }}>
+                                Profile Generated
+                              </h6>
+                            </div>
+                          </>
+                        )}
+
+                        {/* Node 3: Metadata Vectorization */}
+                        {(art.inference || (art.status === 'FAILED' && art.artifact_metadata)) && (
+                          <>
+                            {/* Connector */}
+                            <div style={{ height: '20px', width: '2px', backgroundColor: '#27272a' }} />
+                            <div
+                              onClick={() => {
+                                setSelectedGraphArtifactId(art.artifact_id);
+                                setSelectedGraphNode('vectorization');
+                              }}
+                              style={{
+                                width: '100%',
+                                backgroundColor: isVectorizationSelected ? 'rgba(236, 72, 153, 0.05)' : '#18181b',
+                                border: `1px solid ${isVectorizationSelected ? '#ec4899' : '#27272a'}`,
+                                borderRadius: '8px',
+                                padding: '12px',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                                boxShadow: isVectorizationSelected ? '0 0 10px rgba(236, 72, 153, 0.15)' : 'none',
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '9px', fontWeight: 600, color: '#ec4899', textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>
+                                  Stage 3: Vectorization
+                                  {renderRetryBadge('Metadata Vectorization')}
+                                </span>
+                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: getVectorizationStatusColor(art) }} />
+                              </div>
+                              <h6 style={{ fontSize: '11px', fontWeight: 600, color: '#fafafa', marginTop: '4px' }}>
+                                {art.inference ? 'Index Synced' : 'Vectorization Failed'}
+                              </h6>
+                            </div>
+                          </>
+                        )}
+
+                        {/* Node 4: Target Selection */}
+                        {art.inference && (
+                          <>
+                            {/* Connector */}
+                            <div style={{ height: '20px', width: '2px', backgroundColor: '#27272a' }} />
+                            <div
+                              onClick={() => {
+                                setSelectedGraphArtifactId(art.artifact_id);
+                                setSelectedGraphNode('inference');
+                              }}
+                              style={{
+                                width: '100%',
+                                backgroundColor: isInferenceSelected ? 'rgba(139, 92, 246, 0.05)' : '#18181b',
+                                border: `1px solid ${isInferenceSelected ? '#8b5cf6' : '#27272a'}`,
+                                borderRadius: '8px',
+                                padding: '12px',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                                boxShadow: isInferenceSelected ? '0 0 10px rgba(139, 92, 246, 0.15)' : 'none',
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '9px', fontWeight: 600, color: '#8b5cf6', textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>
+                                  Stage 4: Inference
+                                  {renderRetryBadge('Target Inference')}
+                                </span>
+                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: getInferenceStatusColor(art) }} />
+                              </div>
+                              <h6 style={{ fontSize: '11px', fontWeight: 600, color: '#fafafa', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={artifactTargetName}>
+                                Matched: {artifactTargetName}
+                              </h6>
+                            </div>
+                          </>
+                        )}
+
+                        {/* Node 5: Schema Validation */}
+                        {art.validation && (
+                          <>
+                            {/* Connector */}
+                            <div style={{ height: '20px', width: '2px', backgroundColor: '#27272a' }} />
+                            <div
+                              onClick={() => {
+                                setSelectedGraphArtifactId(art.artifact_id);
+                                setSelectedGraphNode('validation');
+                              }}
+                              style={{
+                                width: '100%',
+                                backgroundColor: isValidationSelected ? 'rgba(16, 185, 129, 0.05)' : '#18181b',
+                                border: `1px solid ${isValidationSelected ? '#10b981' : '#27272a'}`,
+                                borderRadius: '8px',
+                                padding: '12px',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                                boxShadow: isValidationSelected ? '0 0 10px rgba(16, 185, 129, 0.15)' : 'none',
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '9px', fontWeight: 600, color: '#10b981', textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>
+                                  Stage 5: Validation
+                                  {renderRetryBadge('Schema Validation')}
+                                </span>
+                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: getValidationStatusColor(art) }} />
+                              </div>
+                              <h6 style={{ fontSize: '11px', fontWeight: 600, color: '#fafafa', marginTop: '4px' }}>
+                                Status: {art.validation.validation_status}
+                              </h6>
+                            </div>
+                          </>
+                        )}
+
+                        {/* Node 6: Drift Check */}
+                        {art.drift && (
+                          <>
+                            {/* Connector */}
+                            <div style={{ height: '20px', width: '2px', backgroundColor: '#27272a' }} />
+                            <div
+                              onClick={() => {
+                                setSelectedGraphArtifactId(art.artifact_id);
+                                setSelectedGraphNode('drift');
+                              }}
+                              style={{
+                                width: '100%',
+                                backgroundColor: isDriftSelected ? 'rgba(245, 158, 11, 0.05)' : '#18181b',
+                                border: `1px solid ${isDriftSelected ? '#f59e0b' : '#27272a'}`,
+                                borderRadius: '8px',
+                                padding: '12px',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                                boxShadow: isDriftSelected ? '0 0 10px rgba(245, 158, 11, 0.15)' : 'none',
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '9px', fontWeight: 600, color: '#f59e0b', textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>
+                                  Stage 6: Drift Check
+                                  {renderRetryBadge('Schema Drift Detection')}
+                                </span>
+                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: getDriftStatusColor(art) }} />
+                              </div>
+                              <h6 style={{ fontSize: '11px', fontWeight: 600, color: '#fafafa', marginTop: '4px' }}>
+                                Drift: {art.drift.drift_status}
+                              </h6>
+                            </div>
+                          </>
+                        )}
+
+                        {/* Node 7: Final Landing Outcome */}
+                        {(art.recommendation || art.fallback || art.target) && (
+                          <>
+                            {/* Connector */}
+                            <div style={{ height: '20px', width: '2px', backgroundColor: '#27272a' }} />
+                            <div
+                              onClick={() => {
+                                setSelectedGraphArtifactId(art.artifact_id);
+                                setSelectedGraphNode('final');
+                              }}
+                              style={{
+                                width: '100%',
+                                backgroundColor: isFinalSelected ? 'rgba(16, 185, 129, 0.05)' : '#18181b',
+                                border: `1px solid ${isFinalSelected ? '#10b981' : '#27272a'}`,
+                                borderRadius: '8px',
+                                padding: '12px',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                                boxShadow: isFinalSelected ? '0 0 10px rgba(16, 185, 129, 0.15)' : 'none',
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '9px', fontWeight: 600, color: '#10b981', textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>
+                                  Stage 7: Landing Outcome
+                                  {renderRetryBadge('Schema Recommendation Generation')}
+                                </span>
+                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: getFinalStatusColor(art) }} />
+                              </div>
+                              <h6 style={{ fontSize: '11px', fontWeight: 600, color: '#fafafa', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {art.fallback
+                                  ? `Fallback (${art.fallback.request_status})`
+                                  : art.recommendation
+                                  ? `Altered Schema (${art.recommendation.recommendation_status})`
+                                  : art.target
+                                  ? `Land in ${art.target.target_name}`
+                                  : 'Awaiting completion'}
+                              </h6>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-                <h4 style={{ fontSize: '13px', fontWeight: 600, color: '#fafafa', marginTop: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {artLineage.fallback
-                    ? `Fallback (${artLineage.fallback.request_status})`
-                    : artLineage.recommendation
-                    ? `Altered Schema (${artLineage.recommendation.recommendation_status})`
-                    : artLineage.target
-                    ? `Land in ${artLineage.target.target_name}`
-                    : 'Awaiting completion'}
-                </h4>
-                <span style={{ fontSize: '11px', color: '#71717a', display: 'block', marginTop: '4px' }}>
-                  {artLineage.fallback ? `Table: ${artLineage.fallback.backup_table_name || 'raw_landing'}` : 'Final state details'}
-                </span>
               </div>
-
             </div>
           </div>
 
@@ -722,30 +1025,107 @@ export const Jobs: React.FC<JobsProps> = ({ setActiveTab }) => {
 
             {selectedGraphNode === 'source' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#0ea5e9' }}>Source File metadata</h3>
+                <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#0ea5e9' }}>Dataset File Ingestion</h3>
+                
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
-                  <div><span style={{ color: '#71717a' }}>File Name:</span> <span style={{ color: '#fafafa' }}>{artLineage.artifact_name}</span></div>
+                  <div><span style={{ color: '#71717a' }}>File Name:</span> <span style={{ color: '#fafafa', fontWeight: 600 }}>{artLineage.artifact_name}</span></div>
                   <div><span style={{ color: '#71717a' }}>Artifact ID:</span> <span style={{ color: '#fafafa', fontFamily: 'monospace' }}>{artLineage.artifact_id}</span></div>
-                  <div><span style={{ color: '#71717a' }}>External ID:</span> <span style={{ color: '#fafafa', fontFamily: 'monospace' }}>{artLineage.external_artifact_id || 'N/A'}</span></div>
-                  <div><span style={{ color: '#71717a' }}>Pipeline Status:</span> <span style={{ color: '#fafafa' }}>{artLineage.status}</span></div>
-                  <div><span style={{ color: '#71717a' }}>Discovered:</span> <span style={{ color: '#fafafa' }}>{artLineage.discovered_at ? new Date(artLineage.discovered_at).toLocaleString() : 'N/A'}</span></div>
-                  <div><span style={{ color: '#71717a' }}>Processed:</span> <span style={{ color: '#fafafa' }}>{artLineage.processed_at ? new Date(artLineage.processed_at).toLocaleString() : 'N/A'}</span></div>
+                  <div><span style={{ color: '#71717a' }}>Ingestion Status:</span> <span style={{ color: artLineage.status === 'PROCESSED' ? '#10b981' : artLineage.status === 'FAILED' ? '#ef4444' : '#f59e0b', fontWeight: 600 }}>{artLineage.status}</span></div>
+                  {artLineage.external_artifact_id && (
+                    <div><span style={{ color: '#71717a' }}>External ID:</span> <span style={{ color: '#fafafa', fontFamily: 'monospace' }}>{artLineage.external_artifact_id}</span></div>
+                  )}
+                  <div><span style={{ color: '#71717a' }}>Discovered At:</span> <span style={{ color: '#fafafa' }}>{artLineage.discovered_at ? new Date(artLineage.discovered_at).toLocaleString() : 'N/A'}</span></div>
+                  <div><span style={{ color: '#71717a' }}>Processed At:</span> <span style={{ color: '#fafafa' }}>{artLineage.processed_at ? new Date(artLineage.processed_at).toLocaleString() : 'N/A'}</span></div>
                 </div>
 
                 {artLineage.failure_reason && (
                   <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444', padding: '12px', borderRadius: '4px', fontSize: '12px', fontFamily: 'monospace' }}>
-                    <strong>Failure Details:</strong><br/>{artLineage.failure_reason}
+                    <strong>Ingestion Failure Reason:</strong><br/>{artLineage.failure_reason}
                   </div>
                 )}
 
-                {artLineage.artifact_metadata && (
-                  <div>
-                    <h4 style={{ fontSize: '12px', fontWeight: 600, color: '#fafafa', marginBottom: '8px' }}>Metadata profile:</h4>
-                    <pre style={{ margin: 0, padding: '12px', fontSize: '11px', backgroundColor: '#09090b', border: '1px solid #27272a', borderRadius: '4px', color: '#0ea5e9', overflowX: 'auto' }}>
-                      <code>{formatJSONVal(artLineage.artifact_metadata)}</code>
-                    </pre>
+                <div style={{ borderTop: '1px solid #27272a', paddingTop: '12px' }}>
+                  <span style={{ fontSize: '12px', color: '#71717a', display: 'block', marginBottom: '8px' }}>All Job Artifacts ({activeGraphDetails.artifacts.length}):</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {activeGraphDetails.artifacts.map((art) => (
+                      <div
+                        key={art.artifact_id}
+                        onClick={() => setSelectedGraphArtifactId(art.artifact_id)}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '6px 10px',
+                          backgroundColor: selectedGraphArtifactId === art.artifact_id ? 'rgba(14, 165, 233, 0.08)' : 'rgba(255,255,255,0.02)',
+                          border: `1px solid ${selectedGraphArtifactId === art.artifact_id ? '#0ea5e9' : '#27272a'}`,
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                        }}
+                      >
+                        <span style={{ color: '#fafafa', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '200px' }}>{art.artifact_name}</span>
+                        <span style={{ color: art.status === 'PROCESSED' ? '#10b981' : '#ef4444' }}>{art.status}</span>
+                      </div>
+                    ))}
                   </div>
-                )}
+                </div>
+              </div>
+            )}
+
+            {selectedGraphNode === 'extraction' && artLineage.artifact_metadata && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#a855f7' }}>Stage 2: Metadata Profile Extraction</h3>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
+                  {artLineage.artifact_metadata.bucket && (
+                    <div><span style={{ color: '#71717a' }}>GCS Bucket:</span> <span style={{ color: '#fafafa' }}>{artLineage.artifact_metadata.bucket}</span></div>
+                  )}
+                  {artLineage.artifact_metadata.object_name && (
+                    <div><span style={{ color: '#71717a' }}>File Path:</span> <span style={{ color: '#fafafa', fontFamily: 'monospace' }}>{artLineage.artifact_metadata.object_name}</span></div>
+                  )}
+                  {artLineage.artifact_metadata.collection && (
+                    <div><span style={{ color: '#71717a' }}>Firestore Collection:</span> <span style={{ color: '#fafafa' }}>{artLineage.artifact_metadata.collection}</span></div>
+                  )}
+                  {artLineage.artifact_metadata.sampled_count !== undefined && (
+                    <div><span style={{ color: '#71717a' }}>Sampled Records:</span> <span style={{ color: '#fafafa' }}>{artLineage.artifact_metadata.sampled_count}</span></div>
+                  )}
+                  {artLineage.artifact_metadata.size_bytes !== undefined && (
+                    <div><span style={{ color: '#71717a' }}>File Size:</span> <span style={{ color: '#fafafa' }}>{(artLineage.artifact_metadata.size_bytes / 1024).toFixed(2)} KB</span></div>
+                  )}
+                  {artLineage.artifact_metadata.row_count !== undefined && (
+                    <div><span style={{ color: '#71717a' }}>Row Count:</span> <span style={{ color: '#fafafa' }}>{artLineage.artifact_metadata.row_count}</span></div>
+                  )}
+                  {artLineage.artifact_metadata.column_count !== undefined && (
+                    <div><span style={{ color: '#71717a' }}>Column Count:</span> <span style={{ color: '#fafafa' }}>{artLineage.artifact_metadata.column_count}</span></div>
+                  )}
+                </div>
+
+                <div>
+                  <h4 style={{ fontSize: '12px', fontWeight: 600, color: '#fafafa', marginBottom: '8px' }}>Extracted Metadata Profile JSON:</h4>
+                  <pre style={{ margin: 0, padding: '12px', fontSize: '11px', backgroundColor: '#09090b', border: '1px solid #27272a', borderRadius: '4px', color: '#a855f7', overflowX: 'auto', maxHeight: '350px' }}>
+                    <code>{formatJSONVal(artLineage.artifact_metadata)}</code>
+                  </pre>
+                </div>
+              </div>
+            )}
+
+            {selectedGraphNode === 'vectorization' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#ec4899' }}>Stage 3: Metadata Vectorization</h3>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
+                  <div><span style={{ color: '#71717a' }}>Semantic Vector Index:</span> <span style={{ color: '#10b981', fontWeight: 600 }}>Active / Synced</span></div>
+                  <div><span style={{ color: '#71717a' }}>Embedding Model:</span> <span style={{ color: '#fafafa', fontFamily: 'monospace' }}>text-embedding-3-small</span></div>
+                  <div><span style={{ color: '#71717a' }}>Vector Store:</span> <span style={{ color: '#fafafa' }}>Schema Catalog Embedding Database</span></div>
+                  {artLineage.artifact_metadata && artLineage.artifact_metadata.column_count !== undefined && (
+                    <div><span style={{ color: '#71717a' }}>Indexed Columns:</span> <span style={{ color: '#fafafa' }}>{artLineage.artifact_metadata.column_count} fields</span></div>
+                  )}
+                </div>
+
+                <div style={{ backgroundColor: 'rgba(236, 72, 153, 0.04)', border: '1px solid rgba(236, 72, 153, 0.15)', padding: '12px', borderRadius: '6px', fontSize: '12px', lineHeight: 1.5, color: '#a1a1aa' }}>
+                  <strong style={{ color: '#ec4899', display: 'block', marginBottom: '4px' }}>RAG Ingestion Context</strong>
+                  The schema fields extracted during Stage 2 are vectorized and registered in the catalog store. During Stage 4, semantic search will match these embeddings against active catalog schemas to compute candidate scores.
+                </div>
               </div>
             )}
 
@@ -868,7 +1248,7 @@ export const Jobs: React.FC<JobsProps> = ({ setActiveTab }) => {
                 {artLineage.fallback && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
-                      <div><span style={{ color: '#71717a' }}>Fallback Review:</span> <span style={{ color: getFinalStatusColor(), fontWeight: 600 }}>{artLineage.fallback.request_status}</span></div>
+                      <div><span style={{ color: '#71717a' }}>Fallback Review:</span> <span style={{ color: getFinalStatusColor(artLineage), fontWeight: 600 }}>{artLineage.fallback.request_status}</span></div>
                       <div><span style={{ color: '#71717a' }}>Fallback Table:</span> <span style={{ color: '#fafafa', fontFamily: 'monospace' }}>{artLineage.fallback.backup_table_name || 'raw_landing'}</span></div>
                       <div><span style={{ color: '#71717a' }}>Requested:</span> <span style={{ color: '#fafafa' }}>{artLineage.fallback.created_at ? new Date(artLineage.fallback.created_at).toLocaleString() : 'N/A'}</span></div>
                       {artLineage.fallback.approved_by && <div><span style={{ color: '#71717a' }}>Approved By:</span> <span style={{ color: '#fafafa' }}>{artLineage.fallback.approved_by}</span></div>}

@@ -33,6 +33,12 @@ def mock_add(instance):
     elif isinstance(instance, Job):
         if not getattr(instance, "job_id", None):
             instance.job_id = uuid.uuid4()
+        if getattr(instance, "retry_count", None) is None:
+            instance.retry_count = 0
+        if not getattr(instance, "created_at", None):
+            instance.created_at = datetime.utcnow()
+        if not getattr(instance, "updated_at", None):
+            instance.updated_at = datetime.utcnow()
         mock_jobs_db[instance.job_id] = instance
     elif isinstance(instance, AuditLog):
         if not getattr(instance, "log_id", None):
@@ -199,7 +205,7 @@ def test_job_details_unified():
     details = response.json()
     assert details["job"]["job_id"] == str(job_uuid)
     assert details["job"]["status"] == "RUNNING"
-    assert details["inference"] is None
+    assert details["artifacts"] == []
 
 
 def test_audit_logs():

@@ -14,7 +14,7 @@ from app.db.base import Base
 
 class User(Base):
     __tablename__ = "users"
-    __table_args__ = {"schema": "metadata"}
+    __table_args__ = {"schema": "control_plane"}
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -31,6 +31,13 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(
         Text,
         nullable=False
+    )
+
+    role: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        server_default="USER",
+        default="USER"
     )
 
     created_at: Mapped[datetime] = mapped_column(

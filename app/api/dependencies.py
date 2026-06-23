@@ -43,7 +43,8 @@ def get_current_user(
             from app.services.security import hash_password
             dev_user = User(
                 email="dev-engineer@sutherland.com",
-                hashed_password=hash_password("DevPassword123!")
+                hashed_password=hash_password("DevPassword123!"),
+                role="OWNER"
             )
             db.add(dev_user)
             db.commit()

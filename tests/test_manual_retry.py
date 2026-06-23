@@ -118,7 +118,7 @@ def test_retry_job_success(mock_start_stage, mock_publish):
     assert old_job.status == JobStatus.RETRIED
 
     # Ensure DB interactions occurred
-    mock_db.add.assert_called_once()
+    assert mock_db.add.call_count == 2
     mock_db.commit.assert_called()
     mock_publish.assert_called_once()
 

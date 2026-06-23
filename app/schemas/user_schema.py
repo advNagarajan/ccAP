@@ -16,6 +16,7 @@ class UserLogin(BaseModel):
 class UserResponse(BaseModel):
     user_id: UUID
     email: str
+    role: str
     created_at: datetime
 
     class Config:
@@ -26,4 +27,9 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+
+
+class UserRoleUpdate(BaseModel):
+    role: str
+
 

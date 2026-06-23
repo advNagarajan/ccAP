@@ -14,6 +14,7 @@ from app.models.db.job_stage_history import JobStageHistory
 from app.models.db.metadata_profile import MetadataProfile
 from app.models.db.notification_recipient import NotificationRecipient
 from app.models.db.user import User
+from app.models.db.audit_log import AuditLog
 
 
 # Domain Models / Dataclasses / Schemas

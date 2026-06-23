@@ -7,7 +7,7 @@ from app.db.base import Base
 
 class NotificationRecipient(Base):
     __tablename__ = "notification_recipients"
-    __table_args__ = {"schema": "metadata"}
+    __table_args__ = {"schema": "control_plane"}
 
     recipient_id: Mapped[str] = mapped_column(
         UUID(as_uuid=True),

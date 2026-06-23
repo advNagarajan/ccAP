@@ -88,10 +88,11 @@ class SmtpNotificationChannel(BaseNotificationChannel):
             msg.attach(MIMEText(message, "plain"))
             msg.attach(MIMEText(html, "html"))
 
-            # 3. SMTP dispatch protocol
-            with smtplib.SMTP(host, port) as server:
+            with smtplib.SMTP(host, port, timeout=15) as server:
+                server.ehlo()
                 if port == 587:
                     server.starttls()
+                    server.ehlo()
                 if user and password:
                     server.login(user, password)
                 server.sendmail(sender, recipients, msg.as_string())

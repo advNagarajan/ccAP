@@ -40,7 +40,7 @@ def test_smtp_notification_channel_db_lookup(mock_smtp_cls):
         )
 
         mock_db.execute.assert_called_once()
-        mock_smtp_cls.assert_called_once_with("smtp.mail.com", 587)
+        mock_smtp_cls.assert_called_once_with("smtp.mail.com", 587, timeout=15)
         mock_server.starttls.assert_called_once()
         mock_server.login.assert_called_once_with("test", "pwd")
         mock_server.sendmail.assert_called_once()

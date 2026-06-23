@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../utils/api';
 import {
   LogOut,
   User,
@@ -11,6 +12,10 @@ import {
   Shield,
   History,
   AlertTriangle,
+  Bell,
+  X,
+  CheckCircle,
+  Loader2,
 } from 'lucide-react';
 
 interface AppShellProps {
@@ -21,6 +26,65 @@ interface AppShellProps {
 
 export const AppShell: React.FC<AppShellProps> = ({ children, activeTab, setActiveTab }) => {
   const { user, logout, isAdmin } = useAuth();
+
+  const [isPrefModalOpen, setIsPrefModalOpen] = useState(false);
+  const [optIn, setOptIn] = useState(false);
+  const [subscribedTopics, setSubscribedTopics] = useState<string[]>([]);
+  const [recipientId, setRecipientId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isPrefModalOpen || !user) return;
+
+    const fetchPreferences = async () => {
+      setIsLoading(true);
+      try {
+        const recipientsList = await api.get('/recipients');
+        const userRec = recipientsList?.find((r: any) => r.email.toLowerCase() === user.email.toLowerCase());
+        if (userRec) {
+          setRecipientId(userRec.recipient_id);
+          setSubscribedTopics(userRec.subscribed_topics || []);
+          setOptIn(userRec.is_active);
+        } else {
+          setRecipientId(null);
+          setSubscribedTopics(['job-completed', 'job-failed', 'fallback-requested', 'dead-letter']);
+          setOptIn(false);
+        }
+      } catch (err) {
+        console.error('Failed to fetch user notification preferences', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchPreferences();
+  }, [isPrefModalOpen, user]);
+
+  const handleSavePreferences = async () => {
+    if (!user) return;
+    setIsSaving(true);
+    try {
+      if (recipientId) {
+        await api.patch(`/recipients/${recipientId}`, {
+          subscribed_topics: optIn ? subscribedTopics : [],
+          is_active: optIn,
+        });
+      } else {
+        await api.post('/recipients', {
+          email: user.email,
+          subscribed_topics: optIn ? subscribedTopics : [],
+          is_active: optIn,
+        });
+      }
+      setIsPrefModalOpen(false);
+    } catch (err) {
+      console.error('Failed to save notification preferences', err);
+      alert('Failed to save notification preferences.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const menuItems = [
     { id: 'sources', label: 'Registered Sources', icon: Server },
@@ -242,24 +306,44 @@ export const AppShell: React.FC<AppShellProps> = ({ children, activeTab, setActi
                 </div>
               </div>
             </div>
-            <button
-              onClick={logout}
-              title="Sign Out"
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                padding: '6px',
-                borderRadius: '6px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#27272a')}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-            >
-              <LogOut size={16} color="#a1a1aa" />
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <button
+                onClick={() => setIsPrefModalOpen(true)}
+                title="Notification Preferences"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '6px',
+                  borderRadius: '6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#27272a')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              >
+                <Bell size={16} color="#a1a1aa" />
+              </button>
+              <button
+                onClick={logout}
+                title="Sign Out"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '6px',
+                  borderRadius: '6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#27272a')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              >
+                <LogOut size={16} color="#a1a1aa" />
+              </button>
+            </div>
           </div>
         )}
       </aside>
@@ -318,6 +402,192 @@ export const AppShell: React.FC<AppShellProps> = ({ children, activeTab, setActi
         {/* Content Body */}
         <div style={{ flex: 1, padding: '32px', overflowY: 'auto' }}>{children}</div>
       </main>
+
+      {isPrefModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#18181b',
+              border: '1px solid #27272a',
+              borderRadius: '12px',
+              padding: '30px',
+              width: '450px',
+              maxWidth: '90%',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '20px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Bell size={20} color="#f59e0b" />
+                <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#fafafa', margin: 0 }}>
+                  Notification Settings
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsPrefModalOpen(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#71717a',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  borderRadius: '6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#27272a')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Description */}
+            <p style={{ color: '#a1a1aa', fontSize: '13px', margin: 0, lineHeight: '1.5' }}>
+              Select which notifications you would like to receive. Opt-in to start receiving alerts at <strong>{user?.email}</strong>.
+            </p>
+
+            {/* Opt-in Toggle */}
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                color: '#fafafa',
+                fontWeight: 500,
+                padding: '12px',
+                backgroundColor: 'rgba(255,255,255,0.02)',
+                border: '1px solid #27272a',
+                borderRadius: '6px',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={optIn}
+                onChange={(e) => setOptIn(e.target.checked)}
+                style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+              />
+              <span>Enable Email Alerts</span>
+            </label>
+
+            {/* Topics Checkboxes */}
+            {optIn && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingLeft: '8px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Subscribed Topics
+                </span>
+                {[
+                  { id: 'job-completed', label: 'Job Completed' },
+                  { id: 'job-failed', label: 'Job Failed' },
+                  { id: 'fallback-requested', label: 'Fallback Requested' },
+                  { id: 'dead-letter', label: 'Dead Letter Queue Alert' },
+                ].map((topic) => {
+                  const checked = subscribedTopics.includes(topic.id);
+                  return (
+                    <label
+                      key={topic.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        fontSize: '13px',
+                        color: '#a1a1aa',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          if (checked) {
+                            setSubscribedTopics(subscribedTopics.filter((t) => t !== topic.id));
+                          } else {
+                            setSubscribedTopics([...subscribedTopics, topic.id]);
+                          }
+                        }}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      <span style={{ color: checked ? '#fafafa' : '#a1a1aa' }}>{topic.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '10px' }}>
+              <button
+                onClick={() => setIsPrefModalOpen(false)}
+                disabled={isSaving}
+                className="btn-secondary"
+                style={{
+                  height: '36px',
+                  padding: '0 16px',
+                  fontSize: '13px',
+                  borderRadius: '6px',
+                  border: '1px solid #27272a',
+                  backgroundColor: 'transparent',
+                  color: '#fafafa',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSavePreferences}
+                disabled={isSaving || (optIn && subscribedTopics.length === 0)}
+                className="btn"
+                style={{
+                  height: '36px',
+                  padding: '0 16px',
+                  fontSize: '13px',
+                  borderRadius: '6px',
+                  backgroundColor: '#0ea5e9',
+                  color: '#fff',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="animate-spin" size={14} />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle size={14} />
+                    <span>Save Settings</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,3 +1,37 @@
+# Environments
 .env
+.env.*
+!.env.example
+venv/
+.venv/
+env/
+ENV/
+pyvenv.cfg
+
+# Python Cache & Tests
 **/__pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.ruff_cache/
+
+# Node/Frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# System/IDE Files
+.DS_Store
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

@@ -189,7 +189,7 @@ async def test_target_inference_predefined_single():
 
     with patch("workers.inference.processor.start_stage", return_value=mock_stage), \
          patch("workers.inference.processor.complete_stage") as mock_complete, \
-         patch("workers.inference.processor.get_llm_provider", return_value=mock_llm_provider), \
+         patch("app.services.inference_service.get_llm_provider", return_value=mock_llm_provider), \
          patch("workers.inference.processor.publish_target_inferred"):
 
         await infer_target_landing_zone(job_id, artifact_id, profile_id, db)
@@ -262,7 +262,7 @@ async def test_target_inference_predefined_over_limit():
 
     with patch("workers.inference.processor.start_stage", return_value=mock_stage), \
          patch("workers.inference.processor.complete_stage"), \
-         patch("workers.inference.processor.get_llm_provider", return_value=mock_llm_provider), \
+         patch("app.services.inference_service.get_llm_provider", return_value=mock_llm_provider), \
          patch("workers.inference.processor.publish_target_inferred"):
 
         await infer_target_landing_zone(job_id, artifact_id, profile_id, db)

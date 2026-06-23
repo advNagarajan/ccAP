@@ -244,7 +244,7 @@ async def test_inference_prompt_injection():
     mock_stage = MagicMock()
     mock_stage.stage_history_id = uuid.uuid4()
 
-    with patch("workers.inference.processor.get_llm_provider", return_value=mock_llm), \
+    with patch("app.services.inference_service.get_llm_provider", return_value=mock_llm), \
          patch("workers.inference.processor.start_stage", return_value=mock_stage), \
          patch("workers.inference.processor.complete_stage"), \
          patch("workers.inference.processor.publish_target_inferred"):

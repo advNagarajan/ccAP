@@ -36,14 +36,14 @@ def get_current_user(
 
     # 2. If no header was provided, fallback if in DEV_MODE
     if settings.DEV_MODE:
-        stmt = select(User).where(User.email == "dev-engineer@sutherland.com")
+        stmt = select(User).where(User.email == "aadhavps220@gmail.com")
         dev_user = db.execute(stmt).scalar_one_or_none()
         if not dev_user:
             # Create a default dev user if not exists
             from app.services.security import hash_password
             dev_user = User(
-                email="dev-engineer@sutherland.com",
-                hashed_password=hash_password("DevPassword123!"),
+                email="aadhavps220@gmail.com",
+                hashed_password=hash_password("admin123"),
                 role="OWNER"
             )
             db.add(dev_user)

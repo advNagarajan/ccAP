@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
-import { KeyRound, Mail, AlertCircle, ShieldAlert } from 'lucide-react';
+import { KeyRound, Mail, AlertCircle } from 'lucide-react';
 
 export const Login: React.FC = () => {
   const { login } = useAuth();
@@ -27,23 +27,6 @@ export const Login: React.FC = () => {
     }
   };
 
-  const handleDevAutoLogin = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await api.post('/auth/login', {
-        email: 'dev-engineer@sutherland.com',
-        password: 'DevPassword123!',
-      });
-      login(data.access_token, data.user);
-    } catch (err: any) {
-      setError(
-        'Dev login failed. Ensure FastAPI is running and dev user is created.'
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div
@@ -174,35 +157,7 @@ export const Login: React.FC = () => {
           </button>
         </form>
 
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            margin: '20px 0',
-            color: '#71717a',
-            fontSize: '12px',
-          }}
-        >
-          <div style={{ flex: 1, height: '1px', backgroundColor: '#27272a' }}></div>
-          <span style={{ padding: '0 10px' }}>DEV OPTIONS</span>
-          <div style={{ flex: 1, height: '1px', backgroundColor: '#27272a' }}></div>
-        </div>
 
-        <button
-          onClick={handleDevAutoLogin}
-          className="btn btn-secondary"
-          disabled={loading}
-          style={{
-            width: '100%',
-            height: '40px',
-            fontSize: '13px',
-            borderColor: '#3f3f46',
-            color: '#fafafa',
-          }}
-        >
-          <ShieldAlert size={16} />
-          Auto-Login as OWNER
-        </button>
       </div>
     </div>
   );

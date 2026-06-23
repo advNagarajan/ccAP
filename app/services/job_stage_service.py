@@ -17,6 +17,14 @@ logger = logging.getLogger("job_stage_service")
 
 
 def start_stage(job_id, stage_name, db: Session, details=None):
+    # Update parent job's current_stage if it exists
+    try:
+        job_uuid = job_id if isinstance(job_id, UUID) else UUID(str(job_id))
+        job = db.get(Job, job_uuid)
+        if job:
+            job.current_stage = stage_name
+    except Exception as e:
+        logger.warning(f"Failed to update current_stage on job {job_id}: {e}")
 
     record = JobStageHistory(
         job_id=job_id,

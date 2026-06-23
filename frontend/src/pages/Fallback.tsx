@@ -15,12 +15,19 @@ import {
 interface FallbackRequest {
   request_id: string;
   job_id: string;
-  source_id: string;
-  drift_score: number;
-  reason: string | null;
+  artifact_id: string;
+  validation_id: string | null;
+  drift_id: string | null;
+  request_reason: string;
   request_status: string;
-  generated_ddl: string | null;
+  backup_table_name: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  rejected_by: string | null;
+  rejected_at: string | null;
+  review_notes: string | null;
   created_at: string;
+  generated_ddl: string | null;
 }
 
 export const Fallback: React.FC = () => {
@@ -239,7 +246,7 @@ export const Fallback: React.FC = () => {
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontWeight: 600, color: '#fafafa', fontFamily: 'monospace' }}>
-                      REQ-{req.request_id.substring(0, 8)}
+                      REQ-{(req.request_id || '').substring(0, 8)}
                     </span>
                     <span
                       style={{
@@ -251,18 +258,22 @@ export const Fallback: React.FC = () => {
                         fontWeight: 600,
                       }}
                     >
-                      {req.drift_score.toFixed(0)}% Drift
+                      {req.drift_id ? 'High Drift' : 'Fallback Requested'}
                     </span>
                   </div>
-                  <div style={{ fontSize: '12px', color: '#a1a1aa', marginTop: '6px', display: 'flex', gap: '12px' }}>
-                    <span>Job ID: {req.job_id.substring(0, 8)}...</span>
-                    <span>•</span>
-                    <span>Source ID: {req.source_id.substring(0, 8)}...</span>
-                    <span>•</span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <div style={{ fontSize: '12px', color: '#a1a1aa', marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                      <span>Job ID: {(req.job_id || '').substring(0, 8)}...</span>
+                      <span>•</span>
+                      <span>Artifact ID: {(req.artifact_id || '').substring(0, 8)}...</span>
+                    </div>
+                    <div style={{ color: '#fafafa', marginTop: '2px' }}>
+                      <strong>Reason:</strong> {req.request_reason}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#71717a', fontSize: '11px', marginTop: '2px' }}>
                       <Calendar size={12} />
-                      {new Date(req.created_at).toLocaleString()}
-                    </span>
+                      <span>{new Date(req.created_at).toLocaleString()}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -284,7 +295,7 @@ export const Fallback: React.FC = () => {
                     <button
                       onClick={() => {
                         setSelectedReq(req);
-                        setTableName(`landing_fallback_${req.request_id.substring(0, 8)}`);
+                        setTableName(`landing_fallback_${(req.request_id || '').substring(0, 8)}`);
                         setIsApproveOpen(true);
                       }}
                       className="btn"

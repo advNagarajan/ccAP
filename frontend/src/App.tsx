@@ -17,6 +17,20 @@ const AppContent: React.FC = () => {
   const { token, loading } = useAuth();
   const [activeTab, setActiveTab] = useState('sources');
 
+  React.useEffect(() => {
+    if (!loading) {
+      if (!token) {
+        if (window.location.pathname !== '/login') {
+          window.history.replaceState({}, '', '/login');
+        }
+      } else {
+        if (window.location.pathname === '/login') {
+          window.history.replaceState({}, '', '/');
+        }
+      }
+    }
+  }, [token, loading]);
+
   if (loading) {
     return (
       <div

@@ -52,6 +52,7 @@ export const Sources: React.FC = () => {
   // Modals state
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [selectedConfig, setSelectedConfig] = useState<Configuration | null>(null);
 
   // Register Form State
   const [newName, setNewName] = useState('');
@@ -379,17 +380,34 @@ export const Sources: React.FC = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#a1a1aa' }}>
                   <FileCode size={14} />
                   <span>Template ID:</span>
-                  <span
-                    style={{ color: '#fafafa', fontFamily: 'monospace', fontSize: '11px' }}
-                    title={source.config_id}
+                  <button
+                    onClick={() => {
+                      const cfg = configs.find((c) => c.config_id === source.config_id);
+                      if (cfg) {
+                        setSelectedConfig(cfg);
+                      } else {
+                        alert(`Configuration ${source.config_id} details not pre-loaded.`);
+                      }
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#0ea5e9',
+                      fontFamily: 'monospace',
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      padding: 0,
+                      textDecoration: 'underline',
+                    }}
+                    title="Click to view full YAML/JSON template configuration"
                   >
-                    {source.config_id.substring(0, 8)}...
-                  </span>
+                    {(source.config_id || '').substring(0, 8)}...
+                  </button>
                 </div>
               </div>
 
               {/* Hoverable details panel */}
-              <div className="source-hover-config">
+              <div className="hover-config-parent">
                 <span
                   style={{
                     fontSize: '12px',
@@ -401,7 +419,7 @@ export const Sources: React.FC = () => {
                 >
                   Hover to view Connection JSON
                 </span>
-                <div className="source-hover-tooltip">
+                <div className="hover-config-child">
                   <pre
                     style={{
                       margin: 0,
@@ -729,6 +747,105 @@ export const Sources: React.FC = () => {
                 )}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: View Configuration Template */}
+      {selectedConfig && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.8)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '600px',
+              backgroundColor: '#18181b',
+              border: '1px solid #27272a',
+              borderRadius: '8px',
+              padding: '28px',
+              position: 'relative',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+            }}
+          >
+            <button
+              onClick={() => setSelectedConfig(null)}
+              style={{
+                position: 'absolute',
+                top: '20px',
+                right: '20px',
+                background: 'none',
+                border: 'none',
+                color: '#71717a',
+                cursor: 'pointer',
+              }}
+            >
+              <X size={20} />
+            </button>
+
+            <div>
+              <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#fafafa' }}>
+                {selectedConfig.name}
+              </h3>
+              <p style={{ color: '#a1a1aa', fontSize: '13px', marginTop: '4px' }}>
+                Template Config ID: <span style={{ fontFamily: 'monospace' }}>{selectedConfig.config_id}</span> (v{selectedConfig.version})
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', gap: '16px', fontSize: '12px' }}>
+              <div>
+                <span style={{ color: '#71717a' }}>Type: </span>
+                <span style={{ color: '#fafafa', fontWeight: 500 }}>{selectedConfig.config_type}</span>
+              </div>
+              <div>
+                <span style={{ color: '#71717a' }}>Subtype: </span>
+                <span style={{ color: '#fafafa', fontWeight: 500 }}>{selectedConfig.config_subtype}</span>
+              </div>
+              <div>
+                <span style={{ color: '#71717a' }}>Status: </span>
+                <span style={{ color: '#10b981', fontWeight: 500 }}>{selectedConfig.status}</span>
+              </div>
+            </div>
+
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '12px', color: '#a1a1aa' }}>Configuration Content (JSON):</span>
+              <pre
+                style={{
+                  margin: 0,
+                  padding: '16px',
+                  fontSize: '12px',
+                  backgroundColor: '#09090b',
+                  border: '1px solid #27272a',
+                  borderRadius: '6px',
+                  color: '#0ea5e9',
+                  overflowY: 'auto',
+                  flex: 1,
+                  fontFamily: 'monospace',
+                }}
+              >
+                <code>{JSON.stringify(selectedConfig.config_content, null, 2)}</code>
+              </pre>
+            </div>
+
+            <button
+              onClick={() => setSelectedConfig(null)}
+              className="btn btn-secondary"
+              style={{ alignSelf: 'flex-end', height: '36px' }}
+            >
+              Close
+            </button>
           </div>
         </div>
       )}

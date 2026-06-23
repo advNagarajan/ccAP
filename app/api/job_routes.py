@@ -272,7 +272,12 @@ def get_job_details(
         select(MetadataProfile).where(MetadataProfile.job_id == job_id)
     ).scalar_one_or_none()
 
-    # 3. Determine target schema
+    # 3. Fetch associated artifact records
+    artifacts = db.execute(
+        select(ArtifactRecord).where(ArtifactRecord.source_id == job.source_id)
+    ).scalars().all()
+
+    # 4. Determine target schema
     target_id = None
     if recommendation and recommendation.target_id:
         target_id = recommendation.target_id
@@ -287,7 +292,7 @@ def get_job_details(
     if target_id:
         target = db.get(TargetCatalog, target_id)
 
-    # 4. Construct unified response
+    # 5. Construct unified response
     return {
         "job": {
             "job_id": job.job_id,
@@ -332,7 +337,21 @@ def get_job_details(
             "explanation": recommendation.explanation
         } if recommendation else None,
         "source_schema": metadata_profile.metadata_json if metadata_profile else None,
-        "target_schema": target.schema_definition if target else None
+        "target_schema": target.schema_definition if target else None,
+        "artifacts": [
+            {
+                "artifact_id": str(art.artifact_id),
+                "source_id": str(art.source_id),
+                "external_artifact_id": art.external_artifact_id,
+                "artifact_name": art.artifact_name,
+                "status": art.status,
+                "processed_at": art.processed_at.isoformat() if art.processed_at else None,
+                "discovered_at": art.discovered_at.isoformat() if art.discovered_at else None,
+                "failure_reason": art.failure_reason,
+                "artifact_metadata": art.artifact_metadata
+            }
+            for art in artifacts
+        ]
     }
 
 

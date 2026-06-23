@@ -303,7 +303,7 @@ export const Targets: React.FC = () => {
               </div>
 
               {/* Hoverable details panel */}
-              <div className="source-hover-config">
+              <div className="hover-config-parent">
                 <span
                   style={{
                     fontSize: '12px',
@@ -315,7 +315,7 @@ export const Targets: React.FC = () => {
                 >
                   Hover to view target details
                 </span>
-                <div className="source-hover-tooltip">
+                <div className="hover-config-child">
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <div style={{ fontSize: '11px', color: '#fafafa', fontWeight: 600 }}>Connection parameters:</div>
                     <pre

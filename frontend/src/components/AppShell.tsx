@@ -466,73 +466,82 @@ export const AppShell: React.FC<AppShellProps> = ({ children, activeTab, setActi
               Select which notifications you would like to receive. Opt-in to start receiving alerts at <strong>{user?.email}</strong>.
             </p>
 
-            {/* Opt-in Toggle */}
-            <label
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                cursor: 'pointer',
-                fontSize: '14px',
-                color: '#fafafa',
-                fontWeight: 500,
-                padding: '12px',
-                backgroundColor: 'rgba(255,255,255,0.02)',
-                border: '1px solid #27272a',
-                borderRadius: '6px',
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={optIn}
-                onChange={(e) => setOptIn(e.target.checked)}
-                style={{ cursor: 'pointer', width: '16px', height: '16px' }}
-              />
-              <span>Enable Email Alerts</span>
-            </label>
-
-            {/* Topics Checkboxes */}
-            {optIn && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingLeft: '8px' }}>
-                <span style={{ fontSize: '12px', fontWeight: 600, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Subscribed Topics
-                </span>
-                {[
-                  { id: 'job-completed', label: 'Job Completed' },
-                  { id: 'job-failed', label: 'Job Failed' },
-                  { id: 'fallback-requested', label: 'Fallback Requested' },
-                  { id: 'dead-letter', label: 'Dead Letter Queue Alert' },
-                ].map((topic) => {
-                  const checked = subscribedTopics.includes(topic.id);
-                  return (
-                    <label
-                      key={topic.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '10px',
-                        fontSize: '13px',
-                        color: '#a1a1aa',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => {
-                          if (checked) {
-                            setSubscribedTopics(subscribedTopics.filter((t) => t !== topic.id));
-                          } else {
-                            setSubscribedTopics([...subscribedTopics, topic.id]);
-                          }
-                        }}
-                        style={{ cursor: 'pointer' }}
-                      />
-                      <span style={{ color: checked ? '#fafafa' : '#a1a1aa' }}>{topic.label}</span>
-                    </label>
-                  );
-                })}
+            {isLoading ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 0', color: '#a1a1aa', gap: '10px' }}>
+                <Loader2 className="animate-spin" size={20} />
+                <span style={{ fontSize: '13px' }}>Loading notification preferences...</span>
               </div>
+            ) : (
+              <>
+                {/* Opt-in Toggle */}
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    color: '#fafafa',
+                    fontWeight: 500,
+                    padding: '12px',
+                    backgroundColor: 'rgba(255,255,255,0.02)',
+                    border: '1px solid #27272a',
+                    borderRadius: '6px',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={optIn}
+                    onChange={(e) => setOptIn(e.target.checked)}
+                    style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                  />
+                  <span>Enable Email Alerts</span>
+                </label>
+
+                {/* Topics Checkboxes */}
+                {optIn && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingLeft: '8px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Subscribed Topics
+                    </span>
+                    {[
+                      { id: 'job-completed', label: 'Job Completed' },
+                      { id: 'job-failed', label: 'Job Failed' },
+                      { id: 'fallback-requested', label: 'Fallback Requested' },
+                      { id: 'dead-letter', label: 'Dead Letter Queue Alert' },
+                    ].map((topic) => {
+                      const checked = subscribedTopics.includes(topic.id);
+                      return (
+                        <label
+                          key={topic.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            fontSize: '13px',
+                            color: '#a1a1aa',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              if (checked) {
+                                setSubscribedTopics(subscribedTopics.filter((t) => t !== topic.id));
+                              } else {
+                                setSubscribedTopics([...subscribedTopics, topic.id]);
+                              }
+                            }}
+                            style={{ cursor: 'pointer' }}
+                          />
+                          <span style={{ color: checked ? '#fafafa' : '#a1a1aa' }}>{topic.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
 
             {/* Actions */}

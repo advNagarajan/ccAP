@@ -38,6 +38,18 @@ interface StageHistory {
   error_message: string | null;
 }
 
+interface Artifact {
+  artifact_id: string;
+  source_id: string;
+  external_artifact_id: string | null;
+  artifact_name: string;
+  status: string;
+  processed_at: string | null;
+  discovered_at: string | null;
+  failure_reason: string | null;
+  artifact_metadata: any;
+}
+
 interface JobDetails {
   job: Job;
   inference: {
@@ -71,6 +83,7 @@ interface JobDetails {
   } | null;
   source_schema: any;
   target_schema: any;
+  artifacts?: Artifact[];
 }
 
 interface JobsProps {
@@ -551,7 +564,7 @@ const JobRow: React.FC<JobRowProps> = ({
                     <div style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '16px' }}>
                       <span style={{ fontSize: '11px', color: '#71717a', fontWeight: 600, textTransform: 'uppercase' }}>Schema Validation</span>
                       <div style={{ fontSize: '20px', fontWeight: 600, color: '#fafafa', marginTop: '6px' }}>
-                        {details.validation.target_match_percentage.toFixed(0)}% Match
+                        {(details.validation.target_match_percentage ?? 0).toFixed(0)}% Match
                       </div>
                       <div style={{ fontSize: '12px', color: '#a1a1aa', marginTop: '4px' }}>
                         Mapped {details.validation.mapped_column_count} / {details.validation.source_column_count} source columns
@@ -574,7 +587,7 @@ const JobRow: React.FC<JobRowProps> = ({
                         {details.drift.drift_status}
                       </div>
                       <div style={{ fontSize: '12px', color: '#a1a1aa', marginTop: '4px' }}>
-                        Drift Score: {details.drift.drift_score.toFixed(1)}%
+                        Drift Score: {(details.drift.drift_score ?? 0).toFixed(1)}%
                       </div>
                     </div>
                   )}
@@ -584,13 +597,89 @@ const JobRow: React.FC<JobRowProps> = ({
                     <div style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '16px' }}>
                       <span style={{ fontSize: '11px', color: '#71717a', fontWeight: 600, textTransform: 'uppercase' }}>LLM Target Inference</span>
                       <div style={{ fontSize: '20px', fontWeight: 600, color: '#8b5cf6', marginTop: '6px' }}>
-                        {(details.inference.confidence_score * 100).toFixed(0)}% Confidence
+                        {((details.inference.confidence_score ?? 0) * 100).toFixed(0)}% Confidence
                       </div>
                       <div style={{ fontSize: '12px', color: '#a1a1aa', marginTop: '4px' }}>
                         {details.inference.requires_review ? 'Requires manual audit' : 'Automatic confidence check passed'}
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Constituent Artifacts section */}
+              {details && details.artifacts && details.artifacts.length > 0 && (
+                <div>
+                  <h4 style={{ fontSize: '12px', fontWeight: 600, color: '#71717a', textTransform: 'uppercase', marginBottom: '12px', letterSpacing: '0.05em' }}>
+                    Constituent File Artifacts ({details.artifacts.length})
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {details.artifacts.map((art) => {
+                      const isProcessed = art.status.toUpperCase() === 'PROCESSED';
+                      const isFailed = art.status.toUpperCase() === 'FAILED';
+                      let statusColor = '#a1a1aa';
+                      let statusBg = 'rgba(255, 255, 255, 0.05)';
+                      let statusBorder = '1px solid rgba(255, 255, 255, 0.1)';
+
+                      if (isProcessed) {
+                        statusColor = '#10b981';
+                        statusBg = 'rgba(16, 185, 129, 0.1)';
+                        statusBorder = '1px solid rgba(16, 185, 129, 0.2)';
+                      } else if (isFailed) {
+                        statusColor = '#ef4444';
+                        statusBg = 'rgba(239, 68, 68, 0.1)';
+                        statusBorder = '1px solid rgba(239, 68, 68, 0.2)';
+                      }
+
+                      return (
+                        <div
+                          key={art.artifact_id}
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            backgroundColor: '#18181b',
+                            border: '1px solid #27272a',
+                            borderRadius: '6px',
+                            padding: '12px 16px',
+                            gap: '6px',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 500, color: '#fafafa' }}>
+                              {art.artifact_name}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                color: statusColor,
+                                backgroundColor: statusBg,
+                                border: statusBorder,
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                              }}
+                            >
+                              {art.status}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '12px', fontSize: '11px', color: '#71717a' }}>
+                            <span>ID: {(art.artifact_id || '').substring(0, 8)}...</span>
+                            {art.discovered_at && (
+                              <span>Discovered: {new Date(art.discovered_at).toLocaleString()}</span>
+                            )}
+                            {art.processed_at && (
+                              <span>Processed: {new Date(art.processed_at).toLocaleString()}</span>
+                            )}
+                          </div>
+                          {art.failure_reason && (
+                            <div style={{ fontSize: '12px', color: '#ef4444', marginTop: '4px', fontFamily: 'monospace' }}>
+                              <strong>Failure Reason:</strong> {art.failure_reason}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 

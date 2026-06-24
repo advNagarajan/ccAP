@@ -1,0 +1,34 @@
+# Exclude tests/ directory from language statistics tracking (Linguist)
+tests/** linguist-documentation
+tests/** linguist-detectable=false
+
+# Auto-detect text files and perform LF normalization on checkout
+* text=auto
+
+# Ensure files that must have LF line endings (like shell scripts) are checked in with LF
+*.sh text eol=lf
+
+# Ensure files that must have CRLF line endings (like batch files) are checked in with CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Treat image and binary assets as binary to prevent corruption and merge conflicts
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pdf binary
+
+# Ensure configuration and documentation files are handled as text
+*.json text
+*.yml text
+*.yaml text
+*.md text
+*.html text
+*.css text
+*.ts text
+*.tsx text
+*.js text
+*.jsx text

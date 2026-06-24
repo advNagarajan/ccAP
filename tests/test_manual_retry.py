@@ -224,3 +224,145 @@ def test_kill_job_success():
     assert "manually terminated" in mock_job.error_message
 
     mock_db.commit.assert_called()
+
+
+@patch("app.api.job_routes.publish_ingestion_requested")
+@patch("app.api.job_routes.start_stage")
+def test_retry_job_targeted_reset_with_stage_details(mock_start_stage, mock_publish):
+    job_id = uuid.uuid4()
+    source_id = uuid.uuid4()
+    
+    # Mocking old failed job
+    old_job = Job(
+        job_id=job_id,
+        source_id=source_id,
+        status=JobStatus.FAILED,
+        parent_job_id=None,
+        retry_count=0,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
+    )
+    
+    # Mock JobStageHistory for Dataset Acquisition stage
+    from app.models.db.job_stage_history import JobStageHistory
+    mock_stage = JobStageHistory(
+        job_id=job_id,
+        stage_name="Dataset Acquisition",
+        status="FAILED",
+        details={
+            "artifacts": [
+                {"external_id": "gcs://bucket/file1.csv", "status": "COMPLETED"},
+                {"external_id": "gcs://bucket/file2.csv", "status": "FAILED"}
+            ]
+        }
+    )
+    
+    # Mock lookup
+    def mock_get(model_class, ident):
+        if model_class == Job:
+            return old_job
+        return MagicMock()
+
+    mock_db.get.side_effect = mock_get
+    
+    # Mock execute for User query and Stage query dynamically
+    from app.models.db.user import User
+    mock_user = User(email="aadhavps220@gmail.com", role="OWNER")
+
+    def mock_execute(stmt, *args, **kwargs):
+        stmt_str = str(stmt).upper()
+        mock_res = MagicMock()
+        if "JOB_STAGE_HISTORY" in stmt_str:
+            mock_res.scalar_one_or_none.return_value = mock_stage
+        elif "USER" in stmt_str:
+            mock_res.scalar_one_or_none.return_value = mock_user
+        else:
+            mock_res.scalar_one_or_none.return_value = None
+        return mock_res
+        
+    mock_db.execute.side_effect = mock_execute
+    
+    # Mock stage creation
+    mock_new_stage = MagicMock()
+    mock_new_stage.stage_history_id = uuid.uuid4()
+    mock_start_stage.return_value = mock_new_stage
+
+    # Call endpoint
+    response = client.post(f"/jobs/{job_id}/retry")
+    assert response.status_code == 201
+    
+    # Verify update query targeted the specific external_ids
+    found_targeted_update = False
+    for call in mock_db.execute.call_args_list:
+        stmt = call[0][0]
+        if hasattr(stmt, "is_update") and stmt.is_update:
+            where_str = str(stmt.whereclause)
+            if "external_artifact_id" in where_str:
+                found_targeted_update = True
+                
+    assert found_targeted_update
+
+
+@patch("app.api.job_routes.publish_ingestion_requested")
+@patch("app.api.job_routes.start_stage")
+def test_retry_job_fallback_reset(mock_start_stage, mock_publish):
+    job_id = uuid.uuid4()
+    source_id = uuid.uuid4()
+    
+    # Mocking old failed job
+    old_job = Job(
+        job_id=job_id,
+        source_id=source_id,
+        status=JobStatus.FAILED,
+        parent_job_id=None,
+        retry_count=0,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
+    )
+    
+    # Mock lookup
+    def mock_get(model_class, ident):
+        if model_class == Job:
+            return old_job
+        return MagicMock()
+
+    mock_db.get.side_effect = mock_get
+    
+    # Mock execute for User query and Stage query dynamically
+    from app.models.db.user import User
+    mock_user = User(email="aadhavps220@gmail.com", role="OWNER")
+
+    def mock_execute(stmt, *args, **kwargs):
+        stmt_str = str(stmt).upper()
+        mock_res = MagicMock()
+        if "JOB_STAGE_HISTORY" in stmt_str:
+            mock_res.scalar_one_or_none.return_value = None
+        elif "USER" in stmt_str:
+            mock_res.scalar_one_or_none.return_value = mock_user
+        else:
+            mock_res.scalar_one_or_none.return_value = None
+        return mock_res
+        
+    mock_db.execute.side_effect = mock_execute
+    
+    # Mock stage creation
+    mock_stage = MagicMock()
+    mock_stage.stage_history_id = uuid.uuid4()
+    mock_start_stage.return_value = mock_stage
+
+    # Call endpoint
+    response = client.post(f"/jobs/{job_id}/retry")
+    assert response.status_code == 201
+    
+    # Check that update targeted only FAILED status (fallback)
+    found_fallback_update = False
+    for call in mock_db.execute.call_args_list:
+        stmt = call[0][0]
+        if hasattr(stmt, "is_update") and stmt.is_update:
+            where_str = str(stmt.whereclause)
+            if "status =" in where_str and "external_artifact_id" not in where_str:
+                found_fallback_update = True
+                
+    assert found_fallback_update
+
+

@@ -14,6 +14,7 @@ from app.db.session import get_db
 from app.models.db.job import Job
 from app.models.db.artifact_record import ArtifactRecord
 from app.models.db.user import User
+from app.models.db.job_stage_history import JobStageHistory
 
 from app.constants.job_status import JobStatus
 
@@ -127,15 +128,50 @@ def retry_job(
         )
 
     # 4. Reset ArtifactRecords for the source to allow GCS re-ingestion
-    db.execute(
-        update(ArtifactRecord)
-        .where(ArtifactRecord.source_id == old_job.source_id)
-        .values(
-            status="DISCOVERED",
-            processed_at=None,
-            failure_reason=None
+    # Fix retry isolation: find which artifacts were actually attempted in the old job.
+    
+    stage = db.execute(
+        select(JobStageHistory)
+        .where(
+            JobStageHistory.job_id == old_job.job_id,
+            JobStageHistory.stage_name == "Dataset Acquisition"
         )
-    )
+    ).scalar_one_or_none()
+    
+    attempted_external_ids = []
+    if stage and stage.details and "artifacts" in stage.details:
+        for art in stage.details["artifacts"]:
+            if isinstance(art, dict) and "external_id" in art:
+                attempted_external_ids.append(art["external_id"])
+                
+    if attempted_external_ids:
+        # Reset only the artifacts attempted in the failed job
+        db.execute(
+            update(ArtifactRecord)
+            .where(
+                ArtifactRecord.source_id == old_job.source_id,
+                ArtifactRecord.external_artifact_id.in_(attempted_external_ids)
+            )
+            .values(
+                status="DISCOVERED",
+                processed_at=None,
+                failure_reason=None
+            )
+        )
+    else:
+        # Fallback: reset only failed artifacts for this source to avoid resetting completed ones from other lineages
+        db.execute(
+            update(ArtifactRecord)
+            .where(
+                ArtifactRecord.source_id == old_job.source_id,
+                ArtifactRecord.status == "FAILED"
+            )
+            .values(
+                status="DISCOVERED",
+                processed_at=None,
+                failure_reason=None
+            )
+        )
 
     # 5. Create the new job & update old job status to RETRIED
     old_job.status = JobStatus.RETRIED

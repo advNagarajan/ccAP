@@ -288,3 +288,26 @@ def publish_fallback_requested(
         settings.PUBSUB_TOPIC_FALLBACK_REQUESTED,
         payload
     )
+
+
+def publish_quality_check_completed(
+    job_id,
+    source_id,
+    artifact_id,
+    status: str,
+    rules_executed: int,
+    rules_failed: int
+):
+    payload = {
+        "job_id": str(job_id),
+        "source_id": str(source_id),
+        "artifact_id": str(artifact_id),
+        "status": status,
+        "rules_executed": rules_executed,
+        "rules_failed": rules_failed
+    }
+
+    return publish_event(
+        settings.PUBSUB_TOPIC_QUALITY_CHECK_COMPLETED,
+        payload
+    )

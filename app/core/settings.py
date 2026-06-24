@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     PUBSUB_TOPIC_FALLBACK_REQUESTED: str = "fallback-requested"
     PUBSUB_TOPIC_DEAD_LETTER: str
     PUBSUB_TOPIC_QUALITY_CHECK_REQUESTED: str = "quality-check-requested"
+    PUBSUB_TOPIC_QUALITY_CHECK_COMPLETED: str = "quality-check-completed"
 
     PUBSUB_SUBSCRIPTION_INGESTION_REQUESTED: str
     PUBSUB_SUBSCRIPTION_DATASET_RECEIVED: str
@@ -41,6 +42,7 @@ class Settings(BaseSettings):
     PUBSUB_SUBSCRIPTION_TARGET_MUTATED: str
     PUBSUB_SUBSCRIPTION_FEEDBACK_SUBMITTED: str
     PUBSUB_SUBSCRIPTION_QUALITY_CHECK_REQUESTED: str = "quality-check-requested-sub"
+    PUBSUB_SUBSCRIPTION_QUALITY_CHECK_COMPLETED: str = "quality-check-completed-sub"
 
     # Notification Subscriptions
     PUBSUB_SUBSCRIPTION_JOB_COMPLETED: str | None = None
@@ -55,6 +57,7 @@ class Settings(BaseSettings):
     SLACK_WEBHOOK_JOB_COMPLETED: str | None = None
     SLACK_WEBHOOK_JOB_FAILED: str | None = None
     SLACK_WEBHOOK_DEAD_LETTER: str | None = None
+    SLACK_WEBHOOK_QUALITY_CHECK: str | None = None
     SMTP_HOST: str | None = None
     SMTP_PORT: int | None = None
     SMTP_USER: str | None = None

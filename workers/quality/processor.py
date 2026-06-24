@@ -403,6 +403,20 @@ def process_data_quality(
             }
         )
 
+        # Publish quality-check-completed event
+        from app.pubsub.publisher import publish_quality_check_completed
+        try:
+            publish_quality_check_completed(
+                job_id=job.job_id,
+                source_id=job.source_id,
+                artifact_id=artifact_record.artifact_id,
+                status=final_status,
+                rules_executed=rules_executed,
+                rules_failed=rules_failed
+            )
+        except Exception as pub_err:
+            logger.error(f"Failed to publish quality-check-completed event: {pub_err}")
+
         logger.info(f"Data Quality validation complete. Status={final_status}")
         return report
 

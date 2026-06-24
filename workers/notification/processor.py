@@ -59,6 +59,13 @@ def process_notification(topic: str, payload: dict, db: Session) -> None:
         message += f"Threshold failure detected ({reason}). A fallback table proposal has been generated.\n"
         message += f"Please review and approve/reject fallback request ID: {req_id}"
 
+    elif topic == "quality-check-completed":
+        subject = "Notice: Data Quality Check Completed"
+        status = payload.get("status")
+        executed = payload.get("rules_executed", 0)
+        failed = payload.get("rules_failed", 0)
+        message += f"Data Quality Check result: {status}\nRules Executed: {executed}\nRules Failed: {failed}"
+
     for channel in NOTIFICATION_CHANNELS:
         max_attempts = 3
         backoff = 2  # base delay in seconds

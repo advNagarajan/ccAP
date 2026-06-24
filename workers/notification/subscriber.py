@@ -31,7 +31,8 @@ def start_subscriber():
         "job-completed": settings.PUBSUB_SUBSCRIPTION_JOB_COMPLETED,
         "job-failed": settings.PUBSUB_SUBSCRIPTION_JOB_FAILED,
         "fallback-requested": settings.PUBSUB_SUBSCRIPTION_FALLBACK_REQUESTED,
-        "dead-letter": settings.PUBSUB_SUBSCRIPTION_DEAD_LETTER
+        "dead-letter": settings.PUBSUB_SUBSCRIPTION_DEAD_LETTER,
+        "quality-check-completed": settings.PUBSUB_SUBSCRIPTION_QUALITY_CHECK_COMPLETED
     }
 
     futures = []

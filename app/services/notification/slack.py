@@ -25,6 +25,8 @@ class SlackNotificationChannel(BaseNotificationChannel):
             webhook_url = settings.SLACK_WEBHOOK_JOB_COMPLETED or settings.SLACK_WEBHOOK_URL
         elif topic in ("fallback-landing-created", "fallback-requested"):
             webhook_url = settings.SLACK_WEBHOOK_NEW_TABLE or settings.SLACK_WEBHOOK_URL
+        elif topic == "quality-check-completed":
+            webhook_url = settings.SLACK_WEBHOOK_QUALITY_CHECK or settings.SLACK_WEBHOOK_URL
         else:
             webhook_url = settings.SLACK_WEBHOOK_URL
 

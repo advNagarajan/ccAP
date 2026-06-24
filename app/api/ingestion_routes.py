@@ -62,7 +62,8 @@ def create_ingestion(
     try:
         publish_ingestion_requested(
             job.job_id,
-            job.source_id
+            job.source_id,
+            force_dq=payload.force_dq
         )
         complete_stage(stage.stage_history_id, db)
     except Exception as e:

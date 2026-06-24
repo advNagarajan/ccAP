@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 class IngestionCreate(BaseModel):
     source_id: UUID
+    force_dq: bool = False
 
 
 class IngestionResponse(BaseModel):

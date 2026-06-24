@@ -4,8 +4,10 @@ from uuid import UUID
 
 from app.db.database import SessionLocal
 
+from sqlalchemy import select
 from app.models.db.job import Job
 from app.models.db.source import Source
+from app.models.db.artifact_record import ArtifactRecord
 
 from app.constants.job_status import JobStatus
 
@@ -30,6 +32,7 @@ def process_ingestion_requested(message_data: bytes):
 
     payload = json.loads(message_data.decode("utf-8"))
     job_id = UUID(payload["job_id"])
+    force_dq = payload.get("force_dq", False)
 
     db = SessionLocal()
 
@@ -173,6 +176,86 @@ def process_ingestion_requested(message_data: bytes):
                 artifact_info["record_count"] = record_count
                 acq_stage.details = details
                 db.commit()
+
+                # Get the database artifact record to retrieve artifact_id
+                artifact_record = db.execute(
+                    select(ArtifactRecord).where(
+                        ArtifactRecord.source_id == source.source_id,
+                        ArtifactRecord.external_artifact_id == artifact.external_id
+                    )
+                ).scalar_one_or_none()
+
+                if artifact_record:
+                    # Trigger Data Quality Check if enabled
+                    config = source.configuration
+                    if config and config.config_content.get("data_quality_enabled", False):
+                        # Check parent lineage for completed report
+                        lineage_job_ids = [job.job_id]
+                        curr_parent_id = job.parent_job_id
+                        while curr_parent_id:
+                            lineage_job_ids.append(curr_parent_id)
+                            p_job = db.get(Job, curr_parent_id)
+                            curr_parent_id = p_job.parent_job_id if p_job else None
+
+                        from app.models.db.data_quality_job import DataQualityJob
+                        from app.models.db.data_quality_report import DataQualityReport
+                        from app.pubsub.publisher import publish_quality_check_requested
+
+                        # Look for completed report in parent lineage
+                        dq_report_stmt = (
+                            select(DataQualityReport)
+                            .join(DataQualityJob, DataQualityJob.quality_job_id == DataQualityReport.job_id)
+                            .where(
+                                DataQualityJob.parent_job_id.in_(lineage_job_ids),
+                                DataQualityJob.artifact_id == artifact_record.artifact_id,
+                                DataQualityReport.status.in_(["PASSED", "WARNING", "FAILED"])
+                            )
+                        )
+                        existing_completed_report = db.execute(dq_report_stmt).scalars().first()
+
+                        if existing_completed_report and not force_dq:
+                            print(
+                                f"Data Quality report already completed (id={existing_completed_report.report_id}) "
+                                f"in lineage for artifact {artifact.artifact_name}. Skipping."
+                            )
+                        else:
+                            # Check if a quality job mapping already exists for the current ingestion run
+                            existing_dq_job = db.execute(
+                                select(DataQualityJob).where(
+                                    DataQualityJob.parent_job_id == job.job_id,
+                                    DataQualityJob.artifact_id == artifact_record.artifact_id
+                                )
+                            ).scalar_one_or_none()
+
+                            if existing_dq_job:
+                                quality_job_id = existing_dq_job.quality_job_id
+                                print(f"Reusing existing Data Quality Job {quality_job_id} for retry.")
+                            else:
+                                # Create new Quality Job and mapping
+                                dq_run_job = Job(
+                                    source_id=job.source_id,
+                                    status=JobStatus.RECEIVED,
+                                    current_stage="Quality Check Scheduled"
+                                )
+                                db.add(dq_run_job)
+                                db.flush()  # to populate job_id
+                                
+                                dq_job_mapping = DataQualityJob(
+                                    quality_job_id=dq_run_job.job_id,
+                                    parent_job_id=job.job_id,
+                                    artifact_id=artifact_record.artifact_id
+                                )
+                                db.add(dq_job_mapping)
+                                db.commit()
+                                quality_job_id = dq_run_job.job_id
+
+                            # Publish event
+                            publish_quality_check_requested(
+                                job_id=quality_job_id,
+                                parent_job_id=job.job_id,
+                                source_id=source.source_id,
+                                artifact_id=artifact_record.artifact_id
+                            )
 
                 print(
                     f"Processed {artifact.artifact_name} "

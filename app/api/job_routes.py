@@ -94,6 +94,7 @@ def get_job(
 )
 def retry_job(
     job_id: UUID,
+    force_dq: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -198,7 +199,8 @@ def retry_job(
     try:
         publish_ingestion_requested(
             new_job.job_id,
-            new_job.source_id
+            new_job.source_id,
+            force_dq=force_dq
         )
         complete_stage(stage.stage_history_id, db)
     except Exception as e:
@@ -521,7 +523,6 @@ def get_job_stages(
     job_id: UUID,
     db: Session = Depends(get_db)
 ):
-    from app.models.db.job_stage_history import JobStageHistory
     
     stmt = select(JobStageHistory).where(JobStageHistory.job_id == job_id).order_by(JobStageHistory.started_at.asc())
     result = db.execute(stmt)

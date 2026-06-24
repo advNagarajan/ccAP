@@ -144,15 +144,41 @@ class FirestoreConnector(BaseConnector):
             connector_metadata=connector_metadata
         )
 
-    def extract_full(self, source, artifact: Artifact) -> RawData:
+    def extract_full(
+        self,
+        source,
+        artifact: Artifact,
+        sample_ratio: float | None = None,
+        random_sample: bool = False
+    ) -> RawData:
         collection_name = artifact.metadata["collection"]
         previous_update_time = self._get_previous_update_time(source.source_id)
 
         client = self._get_client(source.connection_details)
-        docs = client.collection(collection_name).stream()
+
+        if sample_ratio is not None:
+            # 1. Fetch document references only
+            doc_snapshots = list(client.collection(collection_name).select([]).stream())
+            k = max(1, int(len(doc_snapshots) * sample_ratio))
+            
+            # 2. Sample references
+            if random_sample:
+                sampled_snapshots = random.sample(doc_snapshots, min(len(doc_snapshots), k))
+            else:
+                sampled_snapshots = doc_snapshots[:k]
+                
+            sampled_refs = [snap.reference for snap in sampled_snapshots]
+            
+            # 3. Batch fetch the sampled documents
+            docs = client.get_all(sampled_refs) if sampled_refs else []
+        else:
+            docs = client.collection(collection_name).stream()
 
         records = []
         for doc in docs:
+            # Note: doc might be from get_all (so check if it exists) or stream
+            if hasattr(doc, "exists") and not doc.exists:
+                continue
             if previous_update_time is None or doc.update_time > previous_update_time:
                 records.append(doc.to_dict())
 

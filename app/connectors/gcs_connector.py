@@ -128,7 +128,9 @@ class GCSConnector(BaseConnector):
     def extract_full(
         self,
         source,
-        artifact: Artifact
+        artifact: Artifact,
+        sample_ratio: float | None = None,
+        random_sample: bool = False
     ) -> RawData:
 
         bucket_name = artifact.metadata["bucket"]
@@ -144,6 +146,43 @@ class GCSConnector(BaseConnector):
         content = blob.download_as_text()
 
         format_type = object_name.split(".")[-1].upper()
+
+        if sample_ratio is not None:
+            import random
+            import json
+            import csv
+            from io import StringIO
+            from app.parsers.registry import PARSERS
+
+            parser = PARSERS.get(format_type)
+            if parser is None:
+                raise Exception(f"No parser registered for {format_type}")
+
+            full_raw = RawData(
+                content=content,
+                format_type=format_type,
+                source_type=source.source_type,
+                source_name=object_name,
+                connector_metadata=artifact.metadata
+            )
+            dataset = parser.parse(full_raw)
+            
+            k = max(1, int(len(dataset.records) * sample_ratio))
+            if random_sample:
+                sampled_records = random.sample(dataset.records, min(len(dataset.records), k))
+            else:
+                sampled_records = dataset.records[:k]
+
+            if format_type == "CSV":
+                output = StringIO()
+                if sampled_records:
+                    headers = list(sampled_records[0].keys())
+                    writer = csv.DictWriter(output, fieldnames=headers)
+                    writer.writeheader()
+                    writer.writerows(sampled_records)
+                content = output.getvalue()
+            else:
+                content = json.dumps(sampled_records, default=str)
 
         return RawData(
             content=content,

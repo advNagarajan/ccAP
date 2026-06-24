@@ -29,10 +29,11 @@ def publish_event(topic_name: str, payload: dict):
     return message_id
 
 
-def publish_ingestion_requested(job_id, source_id):
+def publish_ingestion_requested(job_id, source_id, force_dq: bool = False):
     payload = {
         "job_id": str(job_id),
-        "source_id": str(source_id)
+        "source_id": str(source_id),
+        "force_dq": force_dq
     }
 
     return publish_event(
@@ -53,6 +54,24 @@ def publish_dataset_received(
 
     return publish_event(
         settings.PUBSUB_TOPIC_DATASET_RECEIVED,
+        payload
+    )
+
+def publish_quality_check_requested(
+    job_id,
+    parent_job_id,
+    source_id,
+    artifact_id
+):
+    payload = {
+        "job_id": str(job_id),
+        "parent_job_id": str(parent_job_id),
+        "source_id": str(source_id),
+        "artifact_id": str(artifact_id)
+    }
+
+    return publish_event(
+        settings.PUBSUB_TOPIC_QUALITY_CHECK_REQUESTED,
         payload
     )
 

@@ -34,7 +34,9 @@ class BaseConnector(ABC):
     def extract_full(
         self,
         source,
-        artifact: Artifact
+        artifact: Artifact,
+        sample_ratio: float | None = None,
+        random_sample: bool = False
     ) -> RawData:
         pass
     

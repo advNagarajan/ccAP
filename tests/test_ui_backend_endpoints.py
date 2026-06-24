@@ -97,6 +97,9 @@ def mock_execute(statement):
         result_mock.scalar_one_or_none.return_value = None
     elif "metadata_profiles" in stmt_str:
         result_mock.scalar_one_or_none.return_value = None
+    elif "data_quality_reports" in stmt_str or "data_quality_jobs" in stmt_str:
+        result_mock.scalars.return_value.first.return_value = None
+        result_mock.scalar_one_or_none.return_value = None
     
     return result_mock
 
@@ -235,3 +238,110 @@ def test_audit_logs():
     assert len(logs) == 1
     assert logs[0]["action"] == "Trigger Ingestion"
     assert logs[0]["user_email"] == "admin@sutherland.com"
+
+
+def test_job_details_with_data_quality():
+    # Clear mocks
+    mock_jobs_db.clear()
+    
+    job_uuid = uuid.uuid4()
+    artifact_uuid = uuid.uuid4()
+    source_uuid = uuid.uuid4()
+    
+    # 1. Create a job
+    job = Job(
+        job_id=job_uuid,
+        source_id=source_uuid,
+        status="SUCCESS",
+        current_stage="Dataset Published"
+    )
+    mock_add(job)
+    
+    # 2. Mock db execute to return inferences, validations, drift, targets, fallback, and data quality
+    from app.models.db.landing_inference import LandingInference
+    from app.models.db.artifact_record import ArtifactRecord
+    from app.models.db.data_quality_report import DataQualityReport
+    
+    mock_inf = LandingInference(
+        inference_id=uuid.uuid4(),
+        job_id=job_uuid,
+        artifact_id=artifact_uuid,
+        confidence_score=0.95,
+        column_mapping={"id": "id"},
+        unmapped_source_columns=[],
+        missing_target_columns=[],
+        reasoning="Good match",
+        requires_review=False
+    )
+    
+    mock_art = ArtifactRecord(
+        artifact_id=artifact_uuid,
+        source_id=source_uuid,
+        external_artifact_id="gcs://bucket/file.csv",
+        artifact_name="file.csv",
+        status="COMPLETED"
+    )
+    
+    mock_dq_report = DataQualityReport(
+        report_id=uuid.uuid4(),
+        job_id=uuid.uuid4(),
+        artifact_id=artifact_uuid,
+        status="PASSED",
+        rules_executed=5,
+        rules_failed=0,
+        report_json={"summary": "passed"},
+        created_at=datetime.utcnow()
+    )
+    
+    def custom_execute(statement):
+        result_mock = MagicMock()
+        stmt_str = str(statement).lower()
+        
+        if "landing_inferences" in stmt_str:
+            result_mock.scalars.return_value.all.return_value = [mock_inf]
+        elif "data_quality_reports" in stmt_str:
+            result_mock.scalars.return_value.first.return_value = mock_dq_report
+        elif "schema_validations" in stmt_str:
+            result_mock.scalar_one_or_none.return_value = None
+        elif "schema_drifts" in stmt_str:
+            result_mock.scalar_one_or_none.return_value = None
+        elif "schema_recommendations" in stmt_str:
+            result_mock.scalar_one_or_none.return_value = None
+        elif "schema_fallback_requests" in stmt_str:
+            result_mock.scalar_one_or_none.return_value = None
+        elif "metadata_profiles" in stmt_str:
+            result_mock.scalar_one_or_none.return_value = None
+        elif "job_stage_history" in stmt_str:
+            result_mock.scalars.return_value.all.return_value = []
+        return result_mock
+
+    def custom_get(model_class, ident):
+        if model_class == Job:
+            return job
+        elif model_class == ArtifactRecord:
+            return mock_art
+        return None
+
+    original_execute = mock_db.execute
+    original_get = mock_db.get
+    
+    mock_db.execute = custom_execute
+    mock_db.get = custom_get
+    
+    try:
+        response = client.get(f"/jobs/{job_uuid}/details")
+        assert response.status_code == 200
+        details = response.json()
+        
+        # Verify artifact and data quality report
+        assert len(details["artifacts"]) == 1
+        artifact_detail = details["artifacts"][0]
+        assert artifact_detail["artifact_id"] == str(artifact_uuid)
+        assert artifact_detail["data_quality"] is not None
+        assert artifact_detail["data_quality"]["status"] == "PASSED"
+        assert artifact_detail["data_quality"]["rules_executed"] == 5
+        assert artifact_detail["data_quality"]["report_json"] == {"summary": "passed"}
+    finally:
+        mock_db.execute = original_execute
+        mock_db.get = original_get
+

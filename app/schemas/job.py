@@ -132,6 +132,19 @@ class SchemaFallbackSummary(BaseModel):
         from_attributes = True
 
 
+class DataQualityReportSummary(BaseModel):
+    report_id: UUID
+    job_id: UUID
+    status: str
+    rules_executed: int
+    rules_failed: int
+    report_json: dict
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class ArtifactLineageDetails(BaseModel):
     artifact_id: UUID
     source_id: UUID
@@ -148,6 +161,7 @@ class ArtifactLineageDetails(BaseModel):
     recommendation: SchemaRecommendationSummary | None = None
     fallback: SchemaFallbackSummary | None = None
     target: TargetCatalogSummary | None = None
+    data_quality: DataQualityReportSummary | None = None
 
     class Config:
         from_attributes = True

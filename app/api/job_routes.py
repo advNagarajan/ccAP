@@ -320,6 +320,8 @@ def get_job_details(
     from app.models.db.metadata_profile import MetadataProfile
     from app.models.db.target_catalog import TargetCatalog
     from app.models.db.job_stage_history import JobStageHistory
+    from app.models.db.data_quality_job import DataQualityJob
+    from app.models.db.data_quality_report import DataQualityReport
 
     # 1. Fetch the Job
     job = db.get(Job, job_id)
@@ -328,6 +330,14 @@ def get_job_details(
             status_code=404,
             detail="Job not found"
         )
+
+    # Build job parent lineage
+    lineage_job_ids = [job_id]
+    curr_parent_id = job.parent_job_id
+    while curr_parent_id:
+        lineage_job_ids.append(curr_parent_id)
+        p_job = db.get(Job, curr_parent_id)
+        curr_parent_id = p_job.parent_job_id if p_job else None
 
     # 2. Fetch current job stages
     stages_stmt = select(JobStageHistory).where(JobStageHistory.job_id == job_id).order_by(JobStageHistory.started_at.asc())
@@ -441,6 +451,28 @@ def get_job_details(
                 "created_at": fallback.created_at
             }
 
+        dq_report = db.execute(
+            select(DataQualityReport)
+            .join(DataQualityJob, DataQualityJob.quality_job_id == DataQualityReport.job_id)
+            .where(
+                DataQualityJob.parent_job_id.in_(lineage_job_ids),
+                DataQualityJob.artifact_id == artifact.artifact_id
+            )
+            .order_by(DataQualityReport.created_at.desc())
+        ).scalars().first()
+
+        dq_report_summary = None
+        if dq_report:
+            dq_report_summary = {
+                "report_id": dq_report.report_id,
+                "job_id": dq_report.job_id,
+                "status": dq_report.status,
+                "rules_executed": dq_report.rules_executed,
+                "rules_failed": dq_report.rules_failed,
+                "report_json": dq_report.report_json,
+                "created_at": dq_report.created_at
+            }
+
         artifact_details.append({
             "artifact_id": artifact.artifact_id,
             "source_id": artifact.source_id,
@@ -468,7 +500,8 @@ def get_job_details(
             "drift": drift_summary,
             "recommendation": rec_summary,
             "fallback": fallback_summary,
-            "target": target_summary
+            "target": target_summary,
+            "data_quality": dq_report_summary
         })
 
     # If no inferences yet, fall back to base artifacts associated with the source
@@ -477,6 +510,28 @@ def get_job_details(
             select(ArtifactRecord).where(ArtifactRecord.source_id == job.source_id)
         ).scalars().all()
         for art in all_artifacts:
+            art_dq_report = db.execute(
+                select(DataQualityReport)
+                .join(DataQualityJob, DataQualityJob.quality_job_id == DataQualityReport.job_id)
+                .where(
+                    DataQualityJob.parent_job_id.in_(lineage_job_ids),
+                    DataQualityJob.artifact_id == art.artifact_id
+                )
+                .order_by(DataQualityReport.created_at.desc())
+            ).scalars().first()
+
+            art_dq_report_summary = None
+            if art_dq_report:
+                art_dq_report_summary = {
+                    "report_id": art_dq_report.report_id,
+                    "job_id": art_dq_report.job_id,
+                    "status": art_dq_report.status,
+                    "rules_executed": art_dq_report.rules_executed,
+                    "rules_failed": art_dq_report.rules_failed,
+                    "report_json": art_dq_report.report_json,
+                    "created_at": art_dq_report.created_at
+                }
+
             artifact_details.append({
                 "artifact_id": art.artifact_id,
                 "source_id": art.source_id,
@@ -492,7 +547,8 @@ def get_job_details(
                 "drift": None,
                 "recommendation": None,
                 "fallback": None,
-                "target": None
+                "target": None,
+                "data_quality": art_dq_report_summary
             })
 
     # 5. Determine schemas

@@ -17,6 +17,7 @@ class JobResponse(BaseModel):
     parent_job_id: UUID | None = None
     created_at: datetime
     updated_at: datetime
+    job_type: str | None = "INGESTION"
 
     class Config:
         from_attributes = True

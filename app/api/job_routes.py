@@ -6,7 +6,7 @@ from fastapi import (
     HTTPException
 )
 
-from sqlalchemy import select, update
+from sqlalchemy import select, update, or_
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -61,8 +61,33 @@ def get_jobs(
         )
 
     result = db.execute(stmt)
+    jobs = result.scalars().all()
 
-    return result.scalars().all()
+    # Determine job types
+    from app.models.db.data_quality_job import DataQualityJob
+    quality_job_ids = set(
+        db.execute(select(DataQualityJob.quality_job_id)).scalars().all()
+    )
+
+    response_jobs = []
+    for j in jobs:
+        j_dict = {
+            "job_id": j.job_id,
+            "source_id": j.source_id,
+            "status": j.status,
+            "current_stage": j.current_stage,
+            "started_at": j.started_at,
+            "completed_at": j.completed_at,
+            "error_message": j.error_message,
+            "retry_count": j.retry_count,
+            "parent_job_id": j.parent_job_id,
+            "created_at": j.created_at,
+            "updated_at": j.updated_at,
+            "job_type": "QUALITY" if j.job_id in quality_job_ids else "INGESTION"
+        }
+        response_jobs.append(j_dict)
+
+    return response_jobs
 
 
 @router.get(
@@ -84,7 +109,25 @@ def get_job(
             detail="Job not found"
         )
 
-    return job
+    from app.models.db.data_quality_job import DataQualityJob
+    is_quality = db.execute(
+        select(DataQualityJob).where(DataQualityJob.quality_job_id == job_id)
+    ).scalar_one_or_none() is not None
+
+    return {
+        "job_id": job.job_id,
+        "source_id": job.source_id,
+        "status": job.status,
+        "current_stage": job.current_stage,
+        "started_at": job.started_at,
+        "completed_at": job.completed_at,
+        "error_message": job.error_message,
+        "retry_count": job.retry_count,
+        "parent_job_id": job.parent_job_id,
+        "created_at": job.created_at,
+        "updated_at": job.updated_at,
+        "job_type": "QUALITY" if is_quality else "INGESTION"
+    }
 
 
 @router.post(
@@ -455,7 +498,10 @@ def get_job_details(
             select(DataQualityReport)
             .join(DataQualityJob, DataQualityJob.quality_job_id == DataQualityReport.job_id)
             .where(
-                DataQualityJob.parent_job_id.in_(lineage_job_ids),
+                or_(
+                    DataQualityJob.quality_job_id.in_(lineage_job_ids),
+                    DataQualityJob.parent_job_id.in_(lineage_job_ids)
+                ),
                 DataQualityJob.artifact_id == artifact.artifact_id
             )
             .order_by(DataQualityReport.created_at.desc())
@@ -514,7 +560,10 @@ def get_job_details(
                 select(DataQualityReport)
                 .join(DataQualityJob, DataQualityJob.quality_job_id == DataQualityReport.job_id)
                 .where(
-                    DataQualityJob.parent_job_id.in_(lineage_job_ids),
+                    or_(
+                        DataQualityJob.quality_job_id.in_(lineage_job_ids),
+                        DataQualityJob.parent_job_id.in_(lineage_job_ids)
+                    ),
                     DataQualityJob.artifact_id == art.artifact_id
                 )
                 .order_by(DataQualityReport.created_at.desc())

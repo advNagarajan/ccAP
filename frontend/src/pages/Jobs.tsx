@@ -26,6 +26,7 @@ interface Job {
   error_message: string | null;
   created_at: string;
   updated_at: string;
+  job_type?: string;
 }
 
 interface StageHistory {
@@ -117,6 +118,15 @@ interface ArtifactLineageDetails {
     target_name: string;
     target_type: string;
     schema_definition: any;
+  } | null;
+  data_quality: {
+    report_id: string;
+    job_id: string;
+    status: string;
+    rules_executed: number;
+    rules_failed: number;
+    report_json: any;
+    created_at: string;
   } | null;
 }
 
@@ -347,6 +357,15 @@ export const Jobs: React.FC<JobsProps> = ({ setActiveTab }) => {
       if (status === 'COMPLETED') return '#10b981';
       if (status === 'FAILED') return '#ef4444';
       return '#f59e0b';
+    };
+
+    const getDQStatusColor = (art: ArtifactLineageDetails) => {
+      if (!art.data_quality) return '#71717a';
+      const status = art.data_quality.status?.toUpperCase();
+      if (status === 'PASSED') return '#10b981';
+      if (status === 'WARNING') return '#f59e0b';
+      if (status === 'FAILED') return '#ef4444';
+      return '#71717a';
     };
 
     const getInferenceStatusColor = (art: ArtifactLineageDetails) => {
@@ -714,6 +733,228 @@ export const Jobs: React.FC<JobsProps> = ({ setActiveTab }) => {
 
                     const artifactTargetName = art.target?.target_name || art.inference?.matched_target_table || 'Unassigned Catalog';
 
+                    const renderPipelineStages = () => {
+                      return (
+                        <>
+                          {/* Node 2: Metadata Extraction */}
+                          {art.artifact_metadata && (
+                            <>
+                              {/* Connector */}
+                              <div style={{ height: '20px', width: '2px', backgroundColor: '#27272a' }} />
+                              <div
+                                onClick={() => {
+                                  setSelectedGraphArtifactId(art.artifact_id);
+                                  setSelectedGraphNode('extraction');
+                                }}
+                                style={{
+                                  width: '100%',
+                                  backgroundColor: isExtractionSelected ? 'rgba(168, 85, 247, 0.05)' : '#18181b',
+                                  border: `1px solid ${isExtractionSelected ? '#a855f7' : '#27272a'}`,
+                                  borderRadius: '8px',
+                                  padding: '12px',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease',
+                                  boxShadow: isExtractionSelected ? '0 0 10px rgba(168, 85, 247, 0.15)' : 'none',
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span style={{ fontSize: '9px', fontWeight: 600, color: '#a855f7', textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>
+                                    Stage 2: Extraction
+                                    {renderRetryBadge('Metadata Extraction')}
+                                  </span>
+                                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: getExtractionStatusColor(art) }} />
+                                </div>
+                                <h6 style={{ fontSize: '11px', fontWeight: 600, color: '#fafafa', marginTop: '4px' }}>
+                                  Profile Generated
+                                </h6>
+                              </div>
+                            </>
+                          )}
+
+                          {/* Node 3: Metadata Vectorization */}
+                          {(art.inference || (art.status === 'FAILED' && art.artifact_metadata)) && (
+                            <>
+                              {/* Connector */}
+                              <div style={{ height: '20px', width: '2px', backgroundColor: '#27272a' }} />
+                              <div
+                                onClick={() => {
+                                  setSelectedGraphArtifactId(art.artifact_id);
+                                  setSelectedGraphNode('vectorization');
+                                }}
+                                style={{
+                                  width: '100%',
+                                  backgroundColor: isVectorizationSelected ? 'rgba(236, 72, 153, 0.05)' : '#18181b',
+                                  border: `1px solid ${isVectorizationSelected ? '#ec4899' : '#27272a'}`,
+                                  borderRadius: '8px',
+                                  padding: '12px',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease',
+                                  boxShadow: isVectorizationSelected ? '0 0 10px rgba(236, 72, 153, 0.15)' : 'none',
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span style={{ fontSize: '9px', fontWeight: 600, color: '#ec4899', textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>
+                                    Stage 3: Vectorization
+                                    {renderRetryBadge('Metadata Vectorization')}
+                                  </span>
+                                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: getVectorizationStatusColor(art) }} />
+                                </div>
+                                <h6 style={{ fontSize: '11px', fontWeight: 600, color: '#fafafa', marginTop: '4px' }}>
+                                  {art.inference ? 'Index Synced' : 'Vectorization Failed'}
+                                </h6>
+                              </div>
+                            </>
+                          )}
+
+                          {/* Node 4: Target Selection */}
+                          {art.inference && (
+                            <>
+                              {/* Connector */}
+                              <div style={{ height: '20px', width: '2px', backgroundColor: '#27272a' }} />
+                              <div
+                                onClick={() => {
+                                  setSelectedGraphArtifactId(art.artifact_id);
+                                  setSelectedGraphNode('inference');
+                                }}
+                                style={{
+                                  width: '100%',
+                                  backgroundColor: isInferenceSelected ? 'rgba(139, 92, 246, 0.05)' : '#18181b',
+                                  border: `1px solid ${isInferenceSelected ? '#8b5cf6' : '#27272a'}`,
+                                  borderRadius: '8px',
+                                  padding: '12px',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease',
+                                  boxShadow: isInferenceSelected ? '0 0 10px rgba(139, 92, 246, 0.15)' : 'none',
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span style={{ fontSize: '9px', fontWeight: 600, color: '#8b5cf6', textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>
+                                    Stage 4: Inference
+                                    {renderRetryBadge('Target Inference')}
+                                  </span>
+                                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: getInferenceStatusColor(art) }} />
+                                </div>
+                                <h6 style={{ fontSize: '11px', fontWeight: 600, color: '#fafafa', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={artifactTargetName}>
+                                  Matched: {artifactTargetName}
+                                </h6>
+                              </div>
+                            </>
+                          )}
+
+                          {/* Node 5: Schema Validation */}
+                          {art.validation && (
+                            <>
+                              {/* Connector */}
+                              <div style={{ height: '20px', width: '2px', backgroundColor: '#27272a' }} />
+                              <div
+                                onClick={() => {
+                                  setSelectedGraphArtifactId(art.artifact_id);
+                                  setSelectedGraphNode('validation');
+                                }}
+                                style={{
+                                  width: '100%',
+                                  backgroundColor: isValidationSelected ? 'rgba(16, 185, 129, 0.05)' : '#18181b',
+                                  border: `1px solid ${isValidationSelected ? '#10b981' : '#27272a'}`,
+                                  borderRadius: '8px',
+                                  padding: '12px',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease',
+                                  boxShadow: isValidationSelected ? '0 0 10px rgba(16, 185, 129, 0.15)' : 'none',
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span style={{ fontSize: '9px', fontWeight: 600, color: '#10b981', textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>
+                                    Stage 5: Validation
+                                    {renderRetryBadge('Schema Validation')}
+                                  </span>
+                                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: getValidationStatusColor(art) }} />
+                                </div>
+                                <h6 style={{ fontSize: '11px', fontWeight: 600, color: '#fafafa', marginTop: '4px' }}>
+                                  Status: {art.validation.validation_status}
+                                </h6>
+                              </div>
+                            </>
+                          )}
+
+                          {/* Node 6: Drift Check */}
+                          {art.drift && (
+                            <>
+                              {/* Connector */}
+                              <div style={{ height: '20px', width: '2px', backgroundColor: '#27272a' }} />
+                              <div
+                                onClick={() => {
+                                  setSelectedGraphArtifactId(art.artifact_id);
+                                  setSelectedGraphNode('drift');
+                                }}
+                                style={{
+                                  width: '100%',
+                                  backgroundColor: isDriftSelected ? 'rgba(245, 158, 11, 0.05)' : '#18181b',
+                                  border: `1px solid ${isDriftSelected ? '#f59e0b' : '#27272a'}`,
+                                  borderRadius: '8px',
+                                  padding: '12px',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease',
+                                  boxShadow: isDriftSelected ? '0 0 10px rgba(245, 158, 11, 0.15)' : 'none',
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span style={{ fontSize: '9px', fontWeight: 600, color: '#f59e0b', textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>
+                                    Stage 6: Drift Check
+                                    {renderRetryBadge('Schema Drift Detection')}
+                                  </span>
+                                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: getDriftStatusColor(art) }} />
+                                </div>
+                                <h6 style={{ fontSize: '11px', fontWeight: 600, color: '#fafafa', marginTop: '4px' }}>
+                                  Drift: {art.drift.drift_status}
+                                </h6>
+                              </div>
+                            </>
+                          )}
+
+                          {/* Node 7: Final Landing Outcome */}
+                          {(art.recommendation || art.fallback || art.target) && (
+                            <>
+                              {/* Connector */}
+                              <div style={{ height: '20px', width: '2px', backgroundColor: '#27272a' }} />
+                              <div
+                                onClick={() => {
+                                  setSelectedGraphArtifactId(art.artifact_id);
+                                  setSelectedGraphNode('final');
+                                }}
+                                style={{
+                                  width: '100%',
+                                  backgroundColor: isFinalSelected ? 'rgba(16, 185, 129, 0.05)' : '#18181b',
+                                  border: `1px solid ${isFinalSelected ? '#10b981' : '#27272a'}`,
+                                  borderRadius: '8px',
+                                  padding: '12px',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease',
+                                  boxShadow: isFinalSelected ? '0 0 10px rgba(16, 185, 129, 0.15)' : 'none',
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span style={{ fontSize: '9px', fontWeight: 600, color: '#10b981', textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>
+                                    Stage 7: Landing Outcome
+                                    {renderRetryBadge('Schema Recommendation Generation')}
+                                  </span>
+                                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: getFinalStatusColor(art) }} />
+                                </div>
+                                <h6 style={{ fontSize: '11px', fontWeight: 600, color: '#fafafa', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {art.fallback
+                                    ? `Fallback (${art.fallback.request_status})`
+                                    : art.recommendation
+                                    ? `Altered Schema (${art.recommendation.recommendation_status})`
+                                    : art.target
+                                    ? `Land in ${art.target.target_name}`
+                                    : 'Awaiting completion'}
+                                </h6>
+                              </div>
+                            </>
+                          )}
+                        </>
+                      );
+                    };
+
                     return (
                       <div
                         key={art.artifact_id}
@@ -753,220 +994,59 @@ export const Jobs: React.FC<JobsProps> = ({ setActiveTab }) => {
                           </span>
                         </div>
 
-                        {/* Node 2: Metadata Extraction */}
-                        {art.artifact_metadata && (
+                        {art.data_quality ? (
                           <>
-                            {/* Connector */}
-                            <div style={{ height: '20px', width: '2px', backgroundColor: '#27272a' }} />
-                            <div
-                              onClick={() => {
-                                setSelectedGraphArtifactId(art.artifact_id);
-                                setSelectedGraphNode('extraction');
-                              }}
-                              style={{
-                                width: '100%',
-                                backgroundColor: isExtractionSelected ? 'rgba(168, 85, 247, 0.05)' : '#18181b',
-                                border: `1px solid ${isExtractionSelected ? '#a855f7' : '#27272a'}`,
-                                borderRadius: '8px',
-                                padding: '12px',
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease',
-                                boxShadow: isExtractionSelected ? '0 0 10px rgba(168, 85, 247, 0.15)' : 'none',
-                              }}
-                            >
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '9px', fontWeight: 600, color: '#a855f7', textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>
-                                  Stage 2: Extraction
-                                  {renderRetryBadge('Metadata Extraction')}
-                                </span>
-                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: getExtractionStatusColor(art) }} />
-                              </div>
-                              <h6 style={{ fontSize: '11px', fontWeight: 600, color: '#fafafa', marginTop: '4px' }}>
-                                Profile Generated
-                              </h6>
-                            </div>
-                          </>
-                        )}
+                            {/* Fork Connector SVG */}
+                            <svg width="100%" height="32" style={{ display: 'block' }}>
+                              <line x1="50%" y1="0" x2="50%" y2="12" stroke="#27272a" strokeWidth="2" />
+                              <line x1="25%" y1="12" x2="75%" y2="12" stroke="#27272a" strokeWidth="2" />
+                              <line x1="25%" y1="12" x2="25%" y2="32" stroke="#27272a" strokeWidth="2" />
+                              <line x1="75%" y1="12" x2="75%" y2="32" stroke="#27272a" strokeWidth="2" />
+                            </svg>
 
-                        {/* Node 3: Metadata Vectorization */}
-                        {(art.inference || (art.status === 'FAILED' && art.artifact_metadata)) && (
-                          <>
-                            {/* Connector */}
-                            <div style={{ height: '20px', width: '2px', backgroundColor: '#27272a' }} />
-                            <div
-                              onClick={() => {
-                                setSelectedGraphArtifactId(art.artifact_id);
-                                setSelectedGraphNode('vectorization');
-                              }}
-                              style={{
-                                width: '100%',
-                                backgroundColor: isVectorizationSelected ? 'rgba(236, 72, 153, 0.05)' : '#18181b',
-                                border: `1px solid ${isVectorizationSelected ? '#ec4899' : '#27272a'}`,
-                                borderRadius: '8px',
-                                padding: '12px',
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease',
-                                boxShadow: isVectorizationSelected ? '0 0 10px rgba(236, 72, 153, 0.15)' : 'none',
-                              }}
-                            >
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '9px', fontWeight: 600, color: '#ec4899', textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>
-                                  Stage 3: Vectorization
-                                  {renderRetryBadge('Metadata Vectorization')}
-                                </span>
-                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: getVectorizationStatusColor(art) }} />
+                            {/* Parallel split container */}
+                            <div style={{ display: 'flex', width: '100%', gap: '16px', alignItems: 'flex-start' }}>
+                              {/* Left column: Data Quality check node */}
+                              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '120px' }}>
+                                <div
+                                  onClick={() => {
+                                    setSelectedGraphArtifactId(art.artifact_id);
+                                    setSelectedGraphNode('data_quality');
+                                  }}
+                                  style={{
+                                    width: '100%',
+                                    backgroundColor: selectedGraphNode === 'data_quality' && isSelectedArtifact ? 'rgba(244, 63, 94, 0.05)' : '#18181b',
+                                    border: `1px solid ${selectedGraphNode === 'data_quality' && isSelectedArtifact ? '#f43f5e' : '#27272a'}`,
+                                    borderRadius: '8px',
+                                    padding: '12px',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.15s ease',
+                                    boxShadow: selectedGraphNode === 'data_quality' && isSelectedArtifact ? '0 0 10px rgba(244, 63, 94, 0.15)' : 'none',
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '9px', fontWeight: 600, color: '#f43f5e', textTransform: 'uppercase' }}>
+                                      Data Quality
+                                    </span>
+                                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: getDQStatusColor(art) }} />
+                                  </div>
+                                  <h6 style={{ fontSize: '11px', fontWeight: 600, color: '#fafafa', marginTop: '4px' }}>
+                                    {art.data_quality.status}
+                                  </h6>
+                                  <span style={{ fontSize: '9px', color: '#71717a', display: 'block', marginTop: '2px' }}>
+                                    Rules: {art.data_quality.rules_executed} exec
+                                  </span>
+                                </div>
                               </div>
-                              <h6 style={{ fontSize: '11px', fontWeight: 600, color: '#fafafa', marginTop: '4px' }}>
-                                {art.inference ? 'Index Synced' : 'Vectorization Failed'}
-                              </h6>
-                            </div>
-                          </>
-                        )}
 
-                        {/* Node 4: Target Selection */}
-                        {art.inference && (
-                          <>
-                            {/* Connector */}
-                            <div style={{ height: '20px', width: '2px', backgroundColor: '#27272a' }} />
-                            <div
-                              onClick={() => {
-                                setSelectedGraphArtifactId(art.artifact_id);
-                                setSelectedGraphNode('inference');
-                              }}
-                              style={{
-                                width: '100%',
-                                backgroundColor: isInferenceSelected ? 'rgba(139, 92, 246, 0.05)' : '#18181b',
-                                border: `1px solid ${isInferenceSelected ? '#8b5cf6' : '#27272a'}`,
-                                borderRadius: '8px',
-                                padding: '12px',
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease',
-                                boxShadow: isInferenceSelected ? '0 0 10px rgba(139, 92, 246, 0.15)' : 'none',
-                              }}
-                            >
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '9px', fontWeight: 600, color: '#8b5cf6', textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>
-                                  Stage 4: Inference
-                                  {renderRetryBadge('Target Inference')}
-                                </span>
-                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: getInferenceStatusColor(art) }} />
+                              {/* Right column: Main Ingestion pipeline */}
+                              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '120px' }}>
+                                {renderPipelineStages()}
                               </div>
-                              <h6 style={{ fontSize: '11px', fontWeight: 600, color: '#fafafa', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={artifactTargetName}>
-                                Matched: {artifactTargetName}
-                              </h6>
                             </div>
                           </>
-                        )}
-
-                        {/* Node 5: Schema Validation */}
-                        {art.validation && (
-                          <>
-                            {/* Connector */}
-                            <div style={{ height: '20px', width: '2px', backgroundColor: '#27272a' }} />
-                            <div
-                              onClick={() => {
-                                setSelectedGraphArtifactId(art.artifact_id);
-                                setSelectedGraphNode('validation');
-                              }}
-                              style={{
-                                width: '100%',
-                                backgroundColor: isValidationSelected ? 'rgba(16, 185, 129, 0.05)' : '#18181b',
-                                border: `1px solid ${isValidationSelected ? '#10b981' : '#27272a'}`,
-                                borderRadius: '8px',
-                                padding: '12px',
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease',
-                                boxShadow: isValidationSelected ? '0 0 10px rgba(16, 185, 129, 0.15)' : 'none',
-                              }}
-                            >
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '9px', fontWeight: 600, color: '#10b981', textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>
-                                  Stage 5: Validation
-                                  {renderRetryBadge('Schema Validation')}
-                                </span>
-                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: getValidationStatusColor(art) }} />
-                              </div>
-                              <h6 style={{ fontSize: '11px', fontWeight: 600, color: '#fafafa', marginTop: '4px' }}>
-                                Status: {art.validation.validation_status}
-                              </h6>
-                            </div>
-                          </>
-                        )}
-
-                        {/* Node 6: Drift Check */}
-                        {art.drift && (
-                          <>
-                            {/* Connector */}
-                            <div style={{ height: '20px', width: '2px', backgroundColor: '#27272a' }} />
-                            <div
-                              onClick={() => {
-                                setSelectedGraphArtifactId(art.artifact_id);
-                                setSelectedGraphNode('drift');
-                              }}
-                              style={{
-                                width: '100%',
-                                backgroundColor: isDriftSelected ? 'rgba(245, 158, 11, 0.05)' : '#18181b',
-                                border: `1px solid ${isDriftSelected ? '#f59e0b' : '#27272a'}`,
-                                borderRadius: '8px',
-                                padding: '12px',
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease',
-                                boxShadow: isDriftSelected ? '0 0 10px rgba(245, 158, 11, 0.15)' : 'none',
-                              }}
-                            >
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '9px', fontWeight: 600, color: '#f59e0b', textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>
-                                  Stage 6: Drift Check
-                                  {renderRetryBadge('Schema Drift Detection')}
-                                </span>
-                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: getDriftStatusColor(art) }} />
-                              </div>
-                              <h6 style={{ fontSize: '11px', fontWeight: 600, color: '#fafafa', marginTop: '4px' }}>
-                                Drift: {art.drift.drift_status}
-                              </h6>
-                            </div>
-                          </>
-                        )}
-
-                        {/* Node 7: Final Landing Outcome */}
-                        {(art.recommendation || art.fallback || art.target) && (
-                          <>
-                            {/* Connector */}
-                            <div style={{ height: '20px', width: '2px', backgroundColor: '#27272a' }} />
-                            <div
-                              onClick={() => {
-                                setSelectedGraphArtifactId(art.artifact_id);
-                                setSelectedGraphNode('final');
-                              }}
-                              style={{
-                                width: '100%',
-                                backgroundColor: isFinalSelected ? 'rgba(16, 185, 129, 0.05)' : '#18181b',
-                                border: `1px solid ${isFinalSelected ? '#10b981' : '#27272a'}`,
-                                borderRadius: '8px',
-                                padding: '12px',
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease',
-                                boxShadow: isFinalSelected ? '0 0 10px rgba(16, 185, 129, 0.15)' : 'none',
-                              }}
-                            >
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '9px', fontWeight: 600, color: '#10b981', textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>
-                                  Stage 7: Landing Outcome
-                                  {renderRetryBadge('Schema Recommendation Generation')}
-                                </span>
-                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: getFinalStatusColor(art) }} />
-                              </div>
-                              <h6 style={{ fontSize: '11px', fontWeight: 600, color: '#fafafa', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {art.fallback
-                                  ? `Fallback (${art.fallback.request_status})`
-                                  : art.recommendation
-                                  ? `Altered Schema (${art.recommendation.recommendation_status})`
-                                  : art.target
-                                  ? `Land in ${art.target.target_name}`
-                                  : 'Awaiting completion'}
-                              </h6>
-                            </div>
-                          </>
+                        ) : (
+                          renderPipelineStages()
                         )}
                       </div>
                     );
@@ -991,6 +1071,87 @@ export const Jobs: React.FC<JobsProps> = ({ setActiveTab }) => {
               overflowY: 'auto',
             }}
           >
+            {selectedGraphNode === 'data_quality' && artLineage.data_quality && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#f43f5e' }}>Data Quality Check</h3>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
+                  <div><span style={{ color: '#71717a' }}>Status:</span> <span style={{ color: getDQStatusColor(artLineage), fontWeight: 600 }}>{artLineage.data_quality.status}</span></div>
+                  <div><span style={{ color: '#71717a' }}>Job ID:</span> <span style={{ color: '#fafafa', fontFamily: 'monospace' }}>{artLineage.data_quality.job_id}</span></div>
+                  <div><span style={{ color: '#71717a' }}>Executed At:</span> <span style={{ color: '#fafafa' }}>{new Date(artLineage.data_quality.created_at).toLocaleString()}</span></div>
+                  <div><span style={{ color: '#71717a' }}>Rules Run:</span> <span style={{ color: '#fafafa' }}>{artLineage.data_quality.rules_executed} total ({artLineage.data_quality.rules_failed} failed)</span></div>
+                </div>
+
+                {artLineage.data_quality.report_json?.rules && (
+                  <div>
+                    <h4 style={{ fontSize: '12px', fontWeight: 600, color: '#fafafa', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.05em' }}>Rules Log</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {artLineage.data_quality.report_json.rules.map((rule: any, idx: number) => {
+                        const passed = rule.status === 'PASSED';
+                        const warning = rule.status === 'WARNING';
+                        let rColor = '#ef4444';
+                        let rBg = 'rgba(239, 68, 68, 0.05)';
+                        let rBorder = '1px solid rgba(239, 68, 68, 0.2)';
+                        if (passed) {
+                          rColor = '#10b981';
+                          rBg = 'rgba(16, 185, 129, 0.05)';
+                          rBorder = '1px solid rgba(16, 185, 129, 0.2)';
+                        } else if (warning) {
+                          rColor = '#f59e0b';
+                          rBg = 'rgba(245, 158, 11, 0.05)';
+                          rBorder = '1px solid rgba(245, 158, 11, 0.2)';
+                        }
+
+                        return (
+                          <div
+                            key={idx}
+                            style={{
+                              padding: '10px 14px',
+                              backgroundColor: rBg,
+                              border: rBorder,
+                              borderRadius: '6px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '4px',
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: '12px', fontWeight: 600, color: '#fafafa' }}>
+                                {rule.type.replace(/_/g, ' ').toUpperCase()}
+                              </span>
+                              <span style={{ fontSize: '10px', fontWeight: 700, color: rColor }}>
+                                {rule.status}
+                              </span>
+                            </div>
+                            <span style={{ fontSize: '11px', color: '#a1a1aa' }}>
+                              Columns: {Array.isArray(rule.columns) ? rule.columns.join(', ') : typeof rule.columns === 'object' ? Object.keys(rule.columns).join(', ') : rule.column || 'N/A'}
+                            </span>
+                            {rule.failure_count !== undefined && rule.failure_count > 0 && (
+                              <span style={{ fontSize: '11px', color: '#ef4444', fontWeight: 500 }}>
+                                Failures: {rule.failure_count} rows failed
+                              </span>
+                            )}
+                            {rule.details && (
+                              <span style={{ fontSize: '11px', color: '#71717a', fontStyle: 'italic' }}>
+                                {rule.details}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <h4 style={{ fontSize: '12px', fontWeight: 600, color: '#fafafa', marginBottom: '8px' }}>DQ Report JSON:</h4>
+                  <pre style={{ margin: 0, padding: '12px', fontSize: '11px', backgroundColor: '#09090b', border: '1px solid #27272a', borderRadius: '4px', color: '#a1a1aa', overflowX: 'auto', maxHeight: '250px' }}>
+                    <code>{formatJSONVal(artLineage.data_quality.report_json)}</code>
+                  </pre>
+                </div>
+              </div>
+            )}
+
             {selectedGraphNode === 'parent' && activeGraphDetails.parent_job && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#ef4444' }}>Parent Job execution</h3>
@@ -1498,8 +1659,12 @@ const JobRow: React.FC<JobRowProps> = ({
   setActiveTab,
   onOpenGraph,
 }) => {
+  const isQualityJob = job.job_type === 'QUALITY';
   return (
-    <div style={{ borderBottom: '1px solid #27272a' }}>
+    <div style={{ 
+      borderBottom: '1px solid #27272a',
+      borderLeft: isQualityJob ? '3px solid #f43f5e' : 'none',
+    }}>
       {/* Row Summary */}
       <div
         onClick={onExpand}
@@ -1521,6 +1686,23 @@ const JobRow: React.FC<JobRowProps> = ({
               <span style={{ fontWeight: 600, color: '#fafafa', fontFamily: 'monospace', fontSize: '13px' }}>
                 JOB-{job.job_id.substring(0, 8)}
               </span>
+              {isQualityJob && (
+                <span
+                  style={{
+                    fontSize: '9px',
+                    fontWeight: 700,
+                    backgroundColor: 'rgba(244, 63, 94, 0.12)',
+                    color: '#f43f5e',
+                    border: '1px solid rgba(244, 63, 94, 0.25)',
+                    padding: '1px 5px',
+                    borderRadius: '3px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                  }}
+                >
+                  Quality Check
+                </span>
+              )}
               {job.parent_job_id && (
                 <span
                   style={{
@@ -1650,6 +1832,31 @@ const JobRow: React.FC<JobRowProps> = ({
               {/* Data Validation & Schema Drift Metrics grid */}
               {details && details.artifacts && details.artifacts.length > 0 && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+                  {/* Data Quality metrics */}
+                  {(() => {
+                    const artWithDQ = details.artifacts.find((a) => a.data_quality !== null);
+                    if (!artWithDQ || !artWithDQ.data_quality) return null;
+                    const dqColor = artWithDQ.data_quality.status === 'PASSED' ? '#10b981' : artWithDQ.data_quality.status === 'WARNING' ? '#f59e0b' : '#ef4444';
+                    return (
+                      <div style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '16px' }}>
+                        <span style={{ fontSize: '11px', color: '#71717a', fontWeight: 600, textTransform: 'uppercase' }}>Data Quality Check</span>
+                        <div
+                          style={{
+                            fontSize: '20px',
+                            fontWeight: 600,
+                            color: dqColor,
+                            marginTop: '6px',
+                          }}
+                        >
+                          {artWithDQ.data_quality.status}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#a1a1aa', marginTop: '4px' }}>
+                          Passed {artWithDQ.data_quality.rules_executed - artWithDQ.data_quality.rules_failed} / {artWithDQ.data_quality.rules_executed} rules
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* Validation metrics */}
                   {(() => {
                     const artWithVal = details.artifacts.find((a) => a.validation !== null);

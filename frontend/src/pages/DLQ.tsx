@@ -18,6 +18,7 @@ interface Job {
   parent_job_id: string | null;
   error_message: string | null;
   created_at: string;
+  job_type?: string;
 }
 
 export const DLQ: React.FC = () => {
@@ -176,6 +177,7 @@ export const DLQ: React.FC = () => {
                   key={job.job_id}
                   style={{
                     borderBottom: '1px solid #27272a',
+                    borderLeft: job.job_type === 'QUALITY' ? '3px solid #f43f5e' : 'none',
                     transition: 'background-color 0.15s',
                   }}
                   onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.01)')}
@@ -183,7 +185,26 @@ export const DLQ: React.FC = () => {
                 >
                   {/* Job ID */}
                   <td style={{ padding: '16px 20px', fontWeight: 500, fontFamily: 'monospace', color: '#fafafa' }}>
-                    JOB-{job.job_id.substring(0, 8)}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>JOB-{job.job_id.substring(0, 8)}</span>
+                      {job.job_type === 'QUALITY' && (
+                        <span
+                          style={{
+                            fontSize: '9px',
+                            fontWeight: 700,
+                            backgroundColor: 'rgba(244, 63, 94, 0.12)',
+                            color: '#f43f5e',
+                            border: '1px solid rgba(244, 63, 94, 0.25)',
+                            padding: '1px 5px',
+                            borderRadius: '3px',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                          }}
+                        >
+                          Quality Check
+                        </span>
+                      )}
+                    </div>
                   </td>
                   {/* Source ID */}
                   <td style={{ padding: '16px 20px', color: '#a1a1aa' }}>

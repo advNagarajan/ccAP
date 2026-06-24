@@ -48,7 +48,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, activeTab, setActi
           setOptIn(userRec.is_active);
         } else {
           setRecipientId(null);
-          setSubscribedTopics(['job-completed', 'job-failed', 'fallback-requested', 'dead-letter']);
+          setSubscribedTopics(['job-completed', 'job-failed', 'fallback-requested', 'dead-letter', 'quality-check-completed']);
           setOptIn(false);
         }
       } catch (err) {
@@ -90,6 +90,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, activeTab, setActi
     { id: 'sources', label: 'Registered Sources', icon: Server },
     { id: 'targets', label: 'Target Catalog', icon: Database },
     { id: 'jobs', label: 'Pipeline Jobs', icon: Play },
+    { id: 'quality-jobs', label: 'Data Quality Jobs', icon: CheckCircle },
     { id: 'dlq', label: 'Dead Letter Queue', icon: AlertTriangle },
     { id: 'fallback', label: 'Fallback Approvals', icon: FileCode },
   ];
@@ -509,6 +510,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, activeTab, setActi
                       { id: 'job-failed', label: 'Job Failed' },
                       { id: 'fallback-requested', label: 'Fallback Requested' },
                       { id: 'dead-letter', label: 'Dead Letter Queue Alert' },
+                      { id: 'quality-check-completed', label: 'Quality Check Completed' },
                     ].map((topic) => {
                       const checked = subscribedTopics.includes(topic.id);
                       return (

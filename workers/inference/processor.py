@@ -69,10 +69,10 @@ async def infer_target_landing_zone(
         feedback_records = db.scalars(
             select(LlmFeedbackLoop)
             .where(
-                (LlmFeedbackLoop.job_id == job_uuid) &
-                (LlmFeedbackLoop.stage.ilike("%inference%"))
+                LlmFeedbackLoop.stage.ilike("%inference%")
             )
-            .order_by(LlmFeedbackLoop.created_at.asc())
+            .order_by(LlmFeedbackLoop.created_at.desc())
+            .limit(20)
         ).all()
 
         feedback_prompt_part = ""
@@ -124,26 +124,48 @@ async def infer_target_landing_zone(
             else:
                 candidates = db_targets
 
-        if not candidates and not predefined_single:
-            logger.warning("No candidate targets found. Skipping selection.")
-            res_json = {
-                "selected_target_id": None,
-                "confidence_score": 0.0,
-                "reasoning": "No candidate targets found.",
-                "column_mapping": None,
-                "unmapped_source_columns": [],
-                "missing_target_columns": [],
-                "partitioning_recommendation": None,
-                "naming_convention_suggestions": None
-            }
-        else:
-            res_json = await generate_target_inference(
-                db=db,
-                source_json=source_json,
-                candidates=candidates,
-                predefined_single=predefined_single,
-                feedback_prompt_part=feedback_prompt_part
+        enable_agentic = settings.ENABLE_AGENTIC_PIPELINE
+        config_obj = None
+        if job and job.source_id:
+            source_obj = db.get(Source, job.source_id)
+            if source_obj and source_obj.config_id:
+                config_obj = db.get(ProcessingConfiguration, source_obj.config_id)
+        if config_obj and isinstance(config_obj.config_content, dict):
+            enable_agentic = config_obj.config_content.get(
+                "enable_agentic_pipeline", enable_agentic
             )
+
+        if enable_agentic:
+            logger.info("Routing to ADK Inference Agent (Agentic RAG)")
+            from app.services.agents.inference_agent import run_inference_agent
+            res_json = await run_inference_agent(
+                job_id=job_id,
+                source_json=source_json,
+                source_embedding=profile.source_embedding,
+                predefined_target_ids=predefined_ids,
+                db=db,
+            )
+        else:
+            if not candidates and not predefined_single:
+                logger.warning("No candidate targets found. Skipping selection.")
+                res_json = {
+                    "selected_target_id": None,
+                    "confidence_score": 0.0,
+                    "reasoning": "No candidate targets found.",
+                    "column_mapping": None,
+                    "unmapped_source_columns": [],
+                    "missing_target_columns": [],
+                    "partitioning_recommendation": None,
+                    "naming_convention_suggestions": None
+                }
+            else:
+                res_json = await generate_target_inference(
+                    db=db,
+                    source_json=source_json,
+                    candidates=candidates,
+                    predefined_single=predefined_single,
+                    feedback_prompt_part=feedback_prompt_part
+                )
 
         confidence = float(res_json.get("confidence_score", 0.0))
         selected_target_id_str = res_json.get("selected_target_id")

@@ -342,17 +342,13 @@ def test_validation_skipped():
 
     with patch("workers.validation.processor.start_stage", return_value=mock_stage), \
          patch("workers.validation.processor.complete_stage") as mock_complete, \
-         patch("workers.validation.processor.publish_schema_validated") as mock_publish:
+         patch("workers.validation.processor.publish_schema_validated") as mock_publish, \
+         patch("workers.validation.processor.publish_fallback_requested") as mock_fallback:
 
         val_record = process_schema_validation(job_id, artifact_id, profile_id, inference_id, db)
 
         assert val_record.validation_status == "SKIPPED"
         assert val_record.coverage_percentage == 0.0
         assert val_record.target_match_percentage == 0.0
-        mock_publish.assert_called_once_with(
-            job_id=job_id,
-            artifact_id=artifact_id,
-            inference_id=inference_id,
-            validation_id=str(val_record.validation_id),
-            validation_status="SKIPPED"
-        )
+        mock_fallback.assert_called_once()
+        mock_publish.assert_not_called()

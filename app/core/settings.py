@@ -85,6 +85,9 @@ class Settings(BaseSettings):
     # Dev mode
     DEV_MODE: bool = True
 
+    # Agentic Pipeline
+    ENABLE_AGENTIC_PIPELINE: bool = False
+
     model_config = SettingsConfigDict(
         extra="ignore"
     )

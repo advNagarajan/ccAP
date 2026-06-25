@@ -127,10 +127,10 @@ async def process_schema_recommendation(
         feedback_records = db.scalars(
             select(LlmFeedbackLoop)
             .where(
-                (LlmFeedbackLoop.job_id == job_uuid) &
-                (LlmFeedbackLoop.stage.ilike("%recommendation%"))
+                LlmFeedbackLoop.stage.ilike("%recommendation%")
             )
-            .order_by(LlmFeedbackLoop.created_at.asc())
+            .order_by(LlmFeedbackLoop.created_at.desc())
+            .limit(20)
         ).all()
 
         feedback_str = ""

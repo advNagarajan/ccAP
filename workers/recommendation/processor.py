@@ -3,7 +3,10 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
+from app.core.settings import settings
 from app.models.db.job import Job
+from app.models.db.source import Source
+from app.models.db.processing_configuration import ProcessingConfiguration
 from app.models.db.schema_drift import SchemaDrift
 from app.models.db.schema_validation import SchemaValidation
 from app.models.db.landing_inference import LandingInference
@@ -45,6 +48,8 @@ async def process_schema_recommendation(
         val_record = db.get(SchemaValidation, drift_record.validation_id)
         if val_record is None:
             raise ValueError(f"SchemaValidation not found: {drift_record.validation_id}")
+
+        job = db.get(Job, job_uuid)
 
         # Idempotent lookup
         rec_record = db.execute(
@@ -120,40 +125,77 @@ async def process_schema_recommendation(
         if inference is None:
             raise ValueError(f"LandingInference not found: {val_record.inference_id}")
 
-        # 1. Generate deterministic findings
-        findings = extract_deterministic_findings(val_record.report_json, drift_record.drift_summary)
-
-        # Query database for stage-specific feedback
-        feedback_records = db.scalars(
-            select(LlmFeedbackLoop)
-            .where(
-                LlmFeedbackLoop.stage.ilike("%recommendation%")
+        # 1. Determine agentic configuration
+        enable_agentic = settings.ENABLE_AGENTIC_PIPELINE
+        config_obj = None
+        if job and job.source_id:
+            source_obj = db.get(Source, job.source_id)
+            if source_obj and source_obj.config_id:
+                config_obj = db.get(ProcessingConfiguration, source_obj.config_id)
+        if config_obj and isinstance(config_obj.config_content, dict):
+            enable_agentic = config_obj.config_content.get(
+                "enable_agentic_pipeline", enable_agentic
             )
-            .order_by(LlmFeedbackLoop.created_at.desc())
-            .limit(20)
-        ).all()
 
-        feedback_str = ""
-        if feedback_records:
-            feedback_lines = [
-                f"- {record.engineer_notes}"
-                for record in feedback_records
-                if record.engineer_notes
-            ]
-            if feedback_lines:
-                feedback_str = "\n".join(feedback_lines)
-
-        # 2. Invoke LLM recommendation service
         partitioning_rec = inference.partitioning_recommendation
-        llm_output = await generate_schema_recommendations(
-            findings,
-            target,
-            partitioning_rec,
-            feedback_str=feedback_str
-        )
 
+        if enable_agentic:
+            logger.info("Routing to ADK Recommendation Agent (Agentic Path)")
+            from app.services.agents.recommendation_agent import run_recommendation_agent
+            agent_output = await run_recommendation_agent(
+                job_id=job_id,
+                target_id=str(target.target_id),
+                validation_id=str(val_record.validation_id),
+                drift_id=str(drift_record.drift_id),
+                partitioning_recommendation=partitioning_rec,
+                db=db,
+            )
+            recommendations_data = agent_output.get("recommendations", [])
+            deterministic_findings = {
+                "impact_assessment": agent_output.get("impact_assessment", {}),
+                "data_quality_flags": agent_output.get("data_quality_flags"),
+                "risk_level": agent_output.get("risk_level", "LOW"),
+                "estimated_effort": agent_output.get("estimated_effort"),
+                "transformation_plan": agent_output.get("transformation_plan"),
+                "execution_path": "AGENTIC"
+            }
+            explanation = agent_output.get("explanation", "No explanation provided.")
+        else:
+            logger.info("Routing to Standard LLM Recommendation Generator (LLM Path)")
+            # 1. Generate deterministic findings
+            findings = extract_deterministic_findings(val_record.report_json, drift_record.drift_summary)
+            findings["execution_path"] = "LLM"
 
-        recommendations_data = [rec.model_dump() for rec in llm_output.recommendations]
+            # Query database for stage-specific feedback
+            feedback_records = db.scalars(
+                select(LlmFeedbackLoop)
+                .where(
+                    LlmFeedbackLoop.stage.ilike("%recommendation%")
+                )
+                .order_by(LlmFeedbackLoop.created_at.desc())
+                .limit(20)
+            ).all()
+
+            feedback_str = ""
+            if feedback_records:
+                feedback_lines = [
+                    f"- {record.engineer_notes}"
+                    for record in feedback_records
+                    if record.engineer_notes
+                ]
+                if feedback_lines:
+                    feedback_str = "\n".join(feedback_lines)
+
+            # 2. Invoke LLM recommendation service
+            llm_output = await generate_schema_recommendations(
+                findings,
+                target,
+                partitioning_rec,
+                feedback_str=feedback_str
+            )
+            recommendations_data = [rec.model_dump() for rec in llm_output.recommendations]
+            deterministic_findings = findings
+            explanation = llm_output.explanation
 
         # 3. Store in DB
         if rec_record:
@@ -162,10 +204,10 @@ async def process_schema_recommendation(
             rec_record.drift_id = drift_uuid
             rec_record.target_id = target.target_id
             rec_record.recommendation_status = "COMPLETED"
-            rec_record.deterministic_findings = findings
+            rec_record.deterministic_findings = deterministic_findings
             rec_record.recommendations_list = recommendations_data
             rec_record.partitioning_recommendation = partitioning_rec
-            rec_record.explanation = llm_output.explanation
+            rec_record.explanation = explanation
         else:
             rec_record = SchemaRecommendation(
                 job_id=job_uuid,
@@ -174,10 +216,10 @@ async def process_schema_recommendation(
                 drift_id=drift_uuid,
                 target_id=target.target_id,
                 recommendation_status="COMPLETED",
-                deterministic_findings=findings,
+                deterministic_findings=deterministic_findings,
                 recommendations_list=recommendations_data,
                 partitioning_recommendation=partitioning_rec,
-                explanation=llm_output.explanation
+                explanation=explanation
             )
             db.add(rec_record)
 
@@ -191,7 +233,8 @@ async def process_schema_recommendation(
             details={
                 "recommendation_id": str(rec_record.recommendation_id),
                 "status": "COMPLETED",
-                "recommendations_count": len(recommendations_data)
+                "recommendations_count": len(recommendations_data),
+                "execution_path": "AGENTIC" if enable_agentic else "LLM"
             }
         )
 

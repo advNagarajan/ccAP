@@ -40,6 +40,8 @@ class ConfigurationResponse(BaseModel):
 
 
 class ConfigurationUpdate(BaseModel):
+    name: str | None = None
+
     description: str | None = None
 
     config_content: dict | None = None

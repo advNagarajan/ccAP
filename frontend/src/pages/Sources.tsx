@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   Loader2,
   Calendar,
+  RefreshCw,
 } from 'lucide-react';
 
 interface Source {
@@ -51,8 +52,16 @@ export const Sources: React.FC = () => {
 
   // Modals state
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
-  const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [selectedConfig, setSelectedConfig] = useState<Configuration | null>(null);
+
+  // Configuration Swapping Modal State
+  const [isSwapOpen, setIsSwapOpen] = useState(false);
+  const [swappingSource, setSwappingSource] = useState<Source | null>(null);
+  const [nextConfigId, setNextConfigId] = useState('');
+
+  // Pre-ingest Configuration Review Modal State
+  const [isReviewOpen, setIsReviewOpen] = useState(false);
+  const [reviewSource, setReviewSource] = useState<Source | null>(null);
 
   // Register Form State
   const [newName, setNewName] = useState('');
@@ -64,7 +73,6 @@ export const Sources: React.FC = () => {
   // Ingest/Upload Loading States
   const [ingestingId, setIngestingId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   // Success Notification state
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -137,27 +145,6 @@ export const Sources: React.FC = () => {
     }
   };
 
-  const handleConfigUpload = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedFile) return;
-
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-
-      await api.post('/configurations', formData);
-
-      showNotification('Configuration YAML uploaded successfully!');
-      setIsUploadOpen(false);
-      setSelectedFile(null);
-      fetchData();
-    } catch (err: any) {
-      showNotification(err.message || 'Failed to upload YAML config', 'error');
-    } finally {
-      setUploading(false);
-    }
-  };
 
   const handleTriggerIngest = async (sourceId: string) => {
     setIngestingId(sourceId);
@@ -201,17 +188,9 @@ export const Sources: React.FC = () => {
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
           <button
-            onClick={() => setIsUploadOpen(true)}
-            className="btn btn-secondary"
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px' }}
-          >
-            <Upload size={16} />
-            <span>Upload YAML Config</span>
-          </button>
-          <button
             onClick={() => {
               if (configs.length === 0) {
-                showNotification('Upload a configuration template first before registering a source', 'error');
+                showNotification('Register a configuration template under the Configurations tab first before registering a source', 'error');
               } else {
                 setNewConfigId(configs[0].config_id);
                 setIsRegisterOpen(true);
@@ -280,17 +259,9 @@ export const Sources: React.FC = () => {
         >
           <Server size={40} color="#71717a" style={{ margin: '0 auto 16px' }} />
           <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#fafafa' }}>No Sources Registered</h3>
-          <p style={{ color: '#a1a1aa', fontSize: '13px', marginTop: '6px', maxWidth: '380px', margin: '6px auto 20px' }}>
-            Before launching data landing pipelines, you need to register a source connection.
+          <p style={{ color: '#a1a1aa', fontSize: '13px', marginTop: '6px', maxWidth: '380px', margin: '6px auto' }}>
+            Before launching data landing pipelines, you need to register a source connection. Ensure configuration templates are registered under the Configurations tab.
           </p>
-          <button
-            onClick={() => setIsUploadOpen(true)}
-            className="btn"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
-          >
-            <Upload size={16} />
-            <span>Upload YAML template</span>
-          </button>
         </div>
       ) : (
         <div
@@ -379,7 +350,7 @@ export const Sources: React.FC = () => {
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#a1a1aa' }}>
                   <FileCode size={14} />
-                  <span>Template ID:</span>
+                  <span>Template:</span>
                   <button
                     onClick={() => {
                       const cfg = configs.find((c) => c.config_id === source.config_id);
@@ -393,15 +364,36 @@ export const Sources: React.FC = () => {
                       background: 'none',
                       border: 'none',
                       color: '#0ea5e9',
-                      fontFamily: 'monospace',
-                      fontSize: '11px',
+                      fontWeight: 500,
                       cursor: 'pointer',
                       padding: 0,
                       textDecoration: 'underline',
                     }}
                     title="Click to view full YAML/JSON template configuration"
                   >
-                    {(source.config_id || '').substring(0, 8)}...
+                    {configs.find((c) => c.config_id === source.config_id)?.name || (source.config_id || '').substring(0, 8)}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSwappingSource(source);
+                      setNextConfigId(source.config_id);
+                      setIsSwapOpen(true);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#a1a1aa',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      transition: 'color 0.15s',
+                    }}
+                    title="Swap configuration template"
+                    onMouseEnter={(e) => (e.currentTarget.style.color = '#0ea5e9')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = '#a1a1aa')}
+                  >
+                    <RefreshCw size={12} />
                   </button>
                 </div>
               </div>
@@ -440,7 +432,10 @@ export const Sources: React.FC = () => {
 
               {/* Action Button */}
               <button
-                onClick={() => handleTriggerIngest(source.source_id)}
+                onClick={() => {
+                  setReviewSource(source);
+                  setIsReviewOpen(true);
+                }}
                 disabled={ingestingId === source.source_id}
                 className="btn"
                 style={{
@@ -630,126 +625,6 @@ export const Sources: React.FC = () => {
         </div>
       )}
 
-      {/* Modal: Upload YAML Configuration */}
-      {isUploadOpen && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(0,0,0,0.8)',
-            zIndex: 1000,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '20px',
-          }}
-        >
-          <div
-            style={{
-              width: '100%',
-              maxWidth: '450px',
-              backgroundColor: '#18181b',
-              border: '1px solid #27272a',
-              borderRadius: '8px',
-              padding: '28px',
-              position: 'relative',
-            }}
-          >
-            <button
-              onClick={() => {
-                setIsUploadOpen(false);
-                setSelectedFile(null);
-              }}
-              style={{
-                position: 'absolute',
-                top: '20px',
-                right: '20px',
-                background: 'none',
-                border: 'none',
-                color: '#71717a',
-                cursor: 'pointer',
-              }}
-            >
-              <X size={20} />
-            </button>
-
-            <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#fafafa', marginBottom: '8px' }}>
-              Upload Configuration YAML
-            </h3>
-            <p style={{ color: '#a1a1aa', fontSize: '13px', marginBottom: '20px' }}>
-              Add a new ingestion parsing schema using a YAML config structure.
-            </p>
-
-            <form onSubmit={handleConfigUpload} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div
-                style={{
-                  border: '2px dashed #27272a',
-                  borderRadius: '6px',
-                  padding: '30px 20px',
-                  textAlign: 'center',
-                  backgroundColor: '#09090b',
-                  cursor: 'pointer',
-                  position: 'relative',
-                }}
-              >
-                <input
-                  type="file"
-                  accept=".yaml,.yml"
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files.length > 0) {
-                      setSelectedFile(e.target.files[0]);
-                    }
-                  }}
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    opacity: 0,
-                    cursor: 'pointer',
-                  }}
-                />
-                <Upload size={32} color="#71717a" style={{ margin: '0 auto 12px' }} />
-                {selectedFile ? (
-                  <span style={{ fontSize: '14px', color: '#0ea5e9', fontWeight: 500 }}>
-                    {selectedFile.name}
-                  </span>
-                ) : (
-                  <div>
-                    <span style={{ fontSize: '13px', color: '#fafafa', display: 'block', fontWeight: 500 }}>
-                      Choose a YAML file
-                    </span>
-                    <span style={{ fontSize: '11px', color: '#71717a', display: 'block', marginTop: '4px' }}>
-                      Only .yaml or .yml files supported
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              <button
-                type="submit"
-                disabled={!selectedFile || uploading}
-                className="btn"
-                style={{
-                  width: '100%',
-                  height: '40px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                }}
-              >
-                {uploading ? (
-                  <>
-                    <Loader2 className="animate-spin" size={16} />
-                    <span>Uploading...</span>
-                  </>
-                ) : (
-                  <span>Upload Template</span>
-                )}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Modal: View Configuration Template */}
       {selectedConfig && (
@@ -846,6 +721,250 @@ export const Sources: React.FC = () => {
             >
               Close
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Swap Source Config */}
+      {isSwapOpen && swappingSource && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.8)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '450px',
+              backgroundColor: '#18181b',
+              border: '1px solid #27272a',
+              borderRadius: '8px',
+              padding: '28px',
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+            }}
+          >
+            <button
+              onClick={() => setIsSwapOpen(false)}
+              style={{
+                position: 'absolute',
+                top: '20px',
+                right: '20px',
+                background: 'none',
+                border: 'none',
+                color: '#71717a',
+                cursor: 'pointer',
+              }}
+            >
+              <X size={20} />
+            </button>
+
+            <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#fafafa', margin: 0 }}>
+              Swap Configuration Template
+            </h3>
+            <p style={{ color: '#a1a1aa', fontSize: '13px', margin: 0, lineHeight: '1.5' }}>
+              Select the new ingestion/processing configuration template for source: <strong>{swappingSource.name}</strong>
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <select
+                value={nextConfigId}
+                onChange={(e) => setNextConfigId(e.target.value)}
+                style={{
+                  width: '100%',
+                  height: '38px',
+                  backgroundColor: '#09090b',
+                  border: '1px solid #27272a',
+                  borderRadius: '6px',
+                  color: '#fafafa',
+                  padding: '0 12px',
+                }}
+              >
+                {configs.map((c) => (
+                  <option key={c.config_id} value={c.config_id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsSwapOpen(false)}
+                  className="btn btn-secondary"
+                  style={{ height: '36px', padding: '0 16px' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await api.patch(`/sources/${swappingSource.source_id}`, { config_id: nextConfigId });
+                      showNotification('Configuration swapped successfully!');
+                      setIsSwapOpen(false);
+                      fetchData();
+                    } catch (err: any) {
+                      showNotification(err.message || 'Failed to swap configuration', 'error');
+                    }
+                  }}
+                  className="btn"
+                  style={{ height: '36px', padding: '0 16px', backgroundColor: '#0ea5e9', color: '#fff', border: 'none' }}
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Pre-ingestion Active Config Review */}
+      {isReviewOpen && reviewSource && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.8)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '520px',
+              backgroundColor: '#18181b',
+              border: '1px solid #27272a',
+              borderRadius: '8px',
+              padding: '28px',
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+            }}
+          >
+            <button
+              onClick={() => setIsReviewOpen(false)}
+              style={{
+                position: 'absolute',
+                top: '20px',
+                right: '20px',
+                background: 'none',
+                border: 'none',
+                color: '#71717a',
+                cursor: 'pointer',
+              }}
+            >
+              <X size={20} />
+            </button>
+
+            <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#fafafa', margin: 0 }}>
+              Review Ingestion Configuration
+            </h3>
+            <p style={{ color: '#a1a1aa', fontSize: '13px', margin: 0, lineHeight: '1.5' }}>
+              Please review the active settings for source <strong>{reviewSource.name}</strong> before triggering the ingestion job.
+            </p>
+
+            {(() => {
+              const cfg = configs.find((c) => c.config_id === reviewSource.config_id);
+              if (!cfg) {
+                return (
+                  <div style={{ color: '#ef4444', fontSize: '13px' }}>
+                    Active configuration details not loaded.
+                  </div>
+                );
+              }
+
+              const content = cfg.config_content || {};
+              const dqEnabled = content.data_quality_enabled || false;
+              const dqRules = content.data_quality_rules || [];
+              const warningTh = content.validation_thresholds?.warning_threshold ?? 0.40;
+              const drift = content.drift_thresholds || {};
+              const agentic = content.enable_agentic_pipeline || false;
+
+              return (
+                <div
+                  style={{
+                    backgroundColor: '#09090b',
+                    border: '1px solid #27272a',
+                    borderRadius: '6px',
+                    padding: '16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                    fontSize: '13px',
+                    color: '#a1a1aa',
+                  }}
+                >
+                  <div>
+                    <strong style={{ color: '#fafafa' }}>Active Template:</strong> {cfg.name}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <strong style={{ color: '#fafafa' }}>Data Quality Check:</strong>{' '}
+                      <span style={{ color: dqEnabled ? '#10b981' : '#71717a', fontWeight: 600 }}>
+                        {dqEnabled ? 'ENABLED' : 'DISABLED'}
+                      </span>
+                    </div>
+                    <div>
+                      <strong style={{ color: '#fafafa' }}>DQ Rules Configured:</strong>{' '}
+                      <span style={{ color: '#fafafa' }}>{dqRules.length}</span>
+                    </div>
+                    <div>
+                      <strong style={{ color: '#fafafa' }}>Validation Warn Limit:</strong>{' '}
+                      <span style={{ color: '#fafafa' }}>{warningTh * 100}%</span>
+                    </div>
+                    <div>
+                      <strong style={{ color: '#fafafa' }}>Drift Warn/Critical:</strong>{' '}
+                      <span style={{ color: '#fafafa' }}>
+                        {drift.warning_threshold ?? 10} / {drift.critical_threshold ?? 30} columns
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <strong style={{ color: '#fafafa' }}>Pipeline Recommendation Style:</strong>{' '}
+                    <span style={{ color: agentic ? '#0ea5e9' : '#71717a', fontWeight: 600 }}>
+                      {agentic ? 'Vertex AI Agent' : 'Standard Heuristics'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setIsReviewOpen(false)}
+                className="btn btn-secondary"
+                style={{ height: '36px', padding: '0 16px' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsReviewOpen(false);
+                  handleTriggerIngest(reviewSource.source_id);
+                }}
+                className="btn"
+                style={{ height: '36px', padding: '0 16px', backgroundColor: '#0ea5e9', color: '#fff', border: 'none' }}
+              >
+                Proceed Ingestion
+              </button>
+            </div>
           </div>
         </div>
       )}

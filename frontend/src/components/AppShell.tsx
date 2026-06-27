@@ -16,6 +16,7 @@ import {
   X,
   CheckCircle,
   Loader2,
+  Sliders,
 } from 'lucide-react';
 
 interface AppShellProps {
@@ -91,6 +92,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, activeTab, setActi
     { id: 'targets', label: 'Target Catalog', icon: Database },
     { id: 'jobs', label: 'Pipeline Jobs', icon: Play },
     { id: 'quality-jobs', label: 'Data Quality Jobs', icon: CheckCircle },
+    { id: 'configurations', label: 'Configurations', icon: Sliders },
     { id: 'dlq', label: 'Dead Letter Queue', icon: AlertTriangle },
     { id: 'fallback', label: 'Fallback Approvals', icon: FileCode },
   ];

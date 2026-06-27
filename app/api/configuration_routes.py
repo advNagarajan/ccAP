@@ -124,30 +124,32 @@ async def create_configuration(file: UploadFile = File(...), db: Session = Depen
             detail="Invalid config_subtype"
         )
 
+    config_content = dict(config)
+    config_name = config_content.get("name", file.filename)
+
     existing = db.execute(
         select(ProcessingConfiguration).where(
             ProcessingConfiguration.name
-            == file.filename
+            == config_name
         )
     ).scalar_one_or_none()
 
     if existing:
         raise HTTPException(
             status_code=409,
-            detail="Configuration already exists"
+            detail=f"Configuration with name '{config_name}' already exists"
         )
 
-    config_content = dict(config)
-
     config_content.pop("config_type", None)
-
     config_content.pop("config_subtype", None)
+    config_content.pop("name", None)
+    config_description = config_content.pop("description", None)
 
     validate_predefined_targets(config_content, db)
 
     configuration = ProcessingConfiguration(
-        name=file.filename,
-        description=None,
+        name=config_name,
+        description=config_description,
         config_type=config_type,
         config_subtype=config_subtype,
         config_content=config_content,
@@ -217,6 +219,19 @@ def update_configuration(config_id: UUID, payload: ConfigurationUpdate, db: Sess
         )
 
     updates = payload.model_dump(exclude_unset=True)
+
+    if "name" in updates and updates["name"] is not None:
+        new_name = updates["name"]
+        existing_with_name = db.execute(
+            select(ProcessingConfiguration)
+            .where(ProcessingConfiguration.name == new_name)
+            .where(ProcessingConfiguration.config_id != config_id)
+        ).scalar_one_or_none()
+        if existing_with_name:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Configuration with name '{new_name}' already exists"
+            )
 
     if "config_content" in updates and updates["config_content"] is not None:
         validate_predefined_targets(updates["config_content"], db)

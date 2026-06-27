@@ -1,0 +1,100 @@
+# ==============================================================================
+# Smart Data Landing & Schema Intelligence Platform
+# Comprehensive Ingestion & Processing Configuration Template
+# ==============================================================================
+
+# Core Metadata
+config_type: SOURCE           # SOURCE or TARGET
+config_subtype: GCS           # GCS, FIRESTORE, or BIGQUERY
+name: "Standard Ingestion & Quality Profile"
+description: "Comprehensive parsing, validation, drift detection, and data quality check configuration template."
+
+# ------------------------------------------------------------------------------
+# 1. Data Quality Enforcement & Rules
+# ------------------------------------------------------------------------------
+data_quality_enabled: true     # Set to true to trigger DQ validation after ingestion
+
+# Sampling settings to limit processing footprint on large source datasets
+data_quality_sampling:
+  sample_ratio: 0.1           # Float (0.0 to 1.0) indicating the sample size. Omit or set to null for full scans.
+  random_sample: true         # true for random row selection; false for top-N sequential rows
+
+# Executed rules for data profiling checks
+data_quality_rules:
+  # Check for null or empty values on specific columns
+  - type: null_check
+    columns: [email, first_name]
+    allowed_null_ratio: 0.05   # Decimal fraction of allowed null values (e.g. 5%)
+    severity: FAILED           # FAILED, WARNING, or INFO
+
+  # Check that values or combinations of values in columns are unique
+  - type: uniqueness_check
+    columns: [id]
+    severity: FAILED
+
+  # Validate data types for records (int, float, boolean, datetime)
+  - type: type_validity_check  # can also use 'data_type_validity_check'
+    columns:
+      age: int                 # checks if values can be parsed to integers
+      price: float             # checks if values can be parsed to decimals
+      is_active: boolean       # checks for boolean values (true, false, 1, 0, yes, no)
+      created_at: datetime     # checks for ISO 8601 formatted datetime strings
+    severity: WARNING
+
+  # Check numeric values fall within a specific boundary range
+  - type: boundary_range_check # can also use 'boundary_check'
+    columns:
+      age:
+        min: 0
+        max: 120
+      price:
+        min: 0.0               # Omit min or max to enforce one-sided bounds
+    severity: WARNING
+
+  # Match column string patterns against a regular expression
+  - type: regex_pattern_check  # can also use 'regex_check'
+    columns:
+      email: "^\\S+@\\S+\\.\\S+$"
+    severity: FAILED
+
+  # Enforce set membership constraint on column values
+  - type: set_membership_check # can also use 'set_membership'
+    columns:
+      status: [ACTIVE, INACTIVE, PENDING]
+    severity: WARNING
+
+  # Enforce dataset freshness based on datetime column ages
+  - type: freshness_check
+    column: updated_at
+    max_age_hours: 24.0        # Fail if the newest record in the dataset is older than 24 hours
+    severity: WARNING
+
+  # Compare dataset record count against the last successful run
+  - type: volume_change_check
+    max_change_percentage: 25.0 # Warning/failure if rows change by more than 25% compared to the previous run
+    severity: INFO
+
+# ------------------------------------------------------------------------------
+# 2. Schema Validation (Matching against Target Catalog)
+# ------------------------------------------------------------------------------
+validation_thresholds:
+  warning_threshold: 0.40      # Ratio of mismatched columns/types allowed before raising a warning (e.g. 40%)
+
+# ------------------------------------------------------------------------------
+# 3. Schema Drift Detection
+# ------------------------------------------------------------------------------
+drift_thresholds:
+  warning_threshold: 10.0      # Count of drifted columns that triggers a warning status
+  critical_threshold: 30.0     # Count of drifted columns that triggers a critical status and blocks automatic landing
+
+# ------------------------------------------------------------------------------
+# 4. Target Integration & Routing
+# ------------------------------------------------------------------------------
+# List of Target Catalog UUID strings to prioritize during target matching / vectorization
+predefined_target_ids:
+  - "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+
+# ------------------------------------------------------------------------------
+# 5. Agentic AI Recommendation Pipeline
+# ------------------------------------------------------------------------------
+enable_agentic_pipeline: true  # true: route to Vertex LLM Agent for mutations; false: use heuristic matching

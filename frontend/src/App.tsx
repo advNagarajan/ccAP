@@ -12,6 +12,7 @@ import { Fallback } from './pages/Fallback';
 import { Review } from './pages/Review';
 import { Admin } from './pages/Admin';
 import { Audit } from './pages/Audit';
+import { Configurations } from './pages/Configurations';
 import { QualityJobs } from './pages/QualityJobs';
 
 const AppContent: React.FC = () => {
@@ -78,6 +79,8 @@ const AppContent: React.FC = () => {
         return <Audit />;
       case 'quality-jobs':
         return <QualityJobs setActiveTab={setActiveTab} />;
+      case 'configurations':
+        return <Configurations />;
       default:
         return <div style={{ color: '#fafafa' }}>Tab not found</div>;
     }

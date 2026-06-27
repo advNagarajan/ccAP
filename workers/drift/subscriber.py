@@ -1,3 +1,4 @@
+import time
 import json
 import logging
 from google.cloud import pubsub_v1
@@ -54,22 +55,55 @@ def callback_schema_validated(message):
 
 
 def start_subscriber():
-    subscriber = pubsub_v1.SubscriberClient()
+    while True:
+        subscriber = None
+        drift_future = None
+        try:
+            subscriber = pubsub_v1.SubscriberClient()
 
-    drift_sub_path = subscriber.subscription_path(
-        settings.GCP_PROJECT_ID,
-        settings.PUBSUB_SUBSCRIPTION_SCHEMA_VALIDATED
-    )
+            drift_sub_path = subscriber.subscription_path(
+                settings.GCP_PROJECT_ID,
+                settings.PUBSUB_SUBSCRIPTION_SCHEMA_VALIDATED
+            )
 
-    logger.info(f"Subscribing to schema validated: {drift_sub_path}")
-    drift_future = subscriber.subscribe(
-        drift_sub_path,
-        callback=callback_schema_validated
-    )
+            logger.info(f"Subscribing to schema validated: {drift_sub_path}")
+            drift_future = subscriber.subscribe(
+                drift_sub_path,
+                callback=callback_schema_validated
+            )
 
-    try:
-        logger.info("Schema Drift Worker started. Listening on schema-validated subscriptions...")
-        drift_future.result()
-    except KeyboardInterrupt:
-        drift_future.cancel()
-        logger.info("Schema Drift Worker stopped.")
+            logger.info("Schema Drift Worker started. Listening on schema-validated subscriptions...")
+            
+            # Non-blocking poll loop to allow clean KeyboardInterrupt handling
+            while drift_future.running():
+                time.sleep(1)
+                
+            if drift_future.done() and drift_future.exception():
+                drift_future.result()
+
+        except KeyboardInterrupt:
+            logger.info("Schema Drift Worker stopped by user.")
+            if drift_future:
+                try:
+                    drift_future.cancel()
+                except Exception:
+                    pass
+            if subscriber:
+                try:
+                    subscriber.close()
+                except Exception:
+                    pass
+            break
+        except Exception as e:
+            logger.error(f"Schema Drift Subscriber encountered an error: {e}. Reconnecting in 10 seconds...", exc_info=True)
+            if drift_future:
+                try:
+                    drift_future.cancel()
+                except Exception:
+                    pass
+            if subscriber:
+                try:
+                    subscriber.close()
+                except Exception:
+                    pass
+            time.sleep(10)

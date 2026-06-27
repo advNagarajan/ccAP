@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from google import genai
+from google.auth import exceptions as auth_exceptions
 from app.core.settings import settings
 from app.services.llm.base import BaseEmbeddingProvider, BaseLLMProvider
 
@@ -14,6 +15,9 @@ class VertexEmbeddingProvider(BaseEmbeddingProvider):
         self.location = settings.GCP_LOCATION
         self.model = settings.VERTEX_EMBEDDING_MODEL or "text-embedding-004"
         logger.info(f"Initializing VertexEmbeddingProvider on model={self.model} location={self.location}")
+        self._init_client()
+
+    def _init_client(self):
         self.client = genai.Client(
             vertexai=True,
             project=self.project_id,
@@ -35,8 +39,25 @@ class VertexEmbeddingProvider(BaseEmbeddingProvider):
                 raise ValueError("No embeddings returned from Vertex AI.")
             return response.embeddings[0].values
         except Exception as e:
-            logger.error(f"Failed to fetch embedding from Vertex: {e}")
-            raise
+            err_str = str(e).lower()
+            if isinstance(e, auth_exceptions.RefreshError) or any(k in err_str for k in ["refresherror", "refresh token", "credentials", "googleauth", "unauthorized", "authenticated"]):
+                logger.warning(f"Credential/auth error in VertexEmbeddingProvider: {e}. Re-initializing client and retrying...")
+                try:
+                    self._init_client()
+                    response = await asyncio.to_thread(
+                        self.client.models.embed_content,
+                        model=self.model,
+                        contents=text
+                    )
+                    if not response or not response.embeddings:
+                        raise ValueError("No embeddings returned from Vertex AI after client re-initialization.")
+                    return response.embeddings[0].values
+                except Exception as retry_err:
+                    logger.error(f"Failed to fetch embedding on retry after client re-initialization: {retry_err}")
+                    raise retry_err
+            else:
+                logger.error(f"Failed to fetch embedding from Vertex: {e}")
+                raise
 
 
 class VertexLLMProvider(BaseLLMProvider):
@@ -46,6 +67,9 @@ class VertexLLMProvider(BaseLLMProvider):
         self.location = settings.GCP_LOCATION
         self.model = settings.VERTEX_GENERATIVE_MODEL or "gemini-2.5-flash"
         logger.info(f"Initializing VertexLLMProvider on model={self.model} location={self.location}")
+        self._init_client()
+
+    def _init_client(self):
         self.client = genai.Client(
             vertexai=True,
             project=self.project_id,
@@ -75,5 +99,21 @@ class VertexLLMProvider(BaseLLMProvider):
             )
             return response.text
         except Exception as e:
-            logger.error(f"Failed to generate response from Vertex: {e}")
-            raise
+            err_str = str(e).lower()
+            if isinstance(e, auth_exceptions.RefreshError) or any(k in err_str for k in ["refresherror", "refresh token", "credentials", "googleauth", "unauthorized", "authenticated"]):
+                logger.warning(f"Credential/auth error in VertexLLMProvider: {e}. Re-initializing client and retrying...")
+                try:
+                    self._init_client()
+                    response = await asyncio.to_thread(
+                        self.client.models.generate_content,
+                        model=self.model,
+                        contents=prompt,
+                        config=config
+                    )
+                    return response.text
+                except Exception as retry_err:
+                    logger.error(f"Failed to generate response on retry after client re-initialization: {retry_err}")
+                    raise retry_err
+            else:
+                logger.error(f"Failed to generate response from Vertex: {e}")
+                raise

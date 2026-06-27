@@ -14,6 +14,7 @@ from app.services.job_stage_service import update_job_status_from_artifacts
 
 # Option C: Import Google Cloud core exceptions
 from google.api_core import exceptions as google_exceptions
+from google.auth import exceptions as google_auth_exceptions
 import requests
 import urllib3
 try:
@@ -54,6 +55,10 @@ def is_transient_error(e: Exception) -> bool:
         if e.code in (400, 401, 403, 404):
             return False
         return False
+
+    # Check Google Auth Exceptions
+    if isinstance(e, google_auth_exceptions.RefreshError):
+        return True
 
     # 3. Check Database (SQLAlchemy / PostgreSQL) Operational Exceptions
     # If the database goes down or restarts temporarily, we want to retry.
@@ -100,7 +105,7 @@ def is_transient_error(e: Exception) -> bool:
 
     # 8. Check error messages for common cloud/infra keywords as a fallback
     err_str = str(e).lower()
-    if any(keyword in err_str for keyword in ["resource_exhausted", "rate limit", "quota", "503", "504", "timeout", "connection refused", "connection pool", "hallucination"]):
+    if any(keyword in err_str for keyword in ["resource_exhausted", "rate limit", "quota", "503", "504", "timeout", "connection refused", "connection pool", "hallucination", "googleauth", "refresherror", "refresh token", "credentials"]):
         return True
 
     return False
@@ -130,9 +135,13 @@ def is_network_infra_error(e: Exception) -> bool:
     if isinstance(e, google_exceptions.ServiceUnavailable) or (hasattr(e, 'code') and e.code == 503):
         return True
 
-    # 5. Common socket connection error messages
+    # 5. Credentials / Authentication refresh errors
+    if isinstance(e, google_auth_exceptions.RefreshError):
+        return True
+
+    # 6. Common socket connection error messages
     err_str = str(e).lower()
-    if any(phrase in err_str for phrase in ["name or service not known", "dns", "connection aborted", "503 service unavailable", "failed to establish a new connection", "database connection"]):
+    if any(phrase in err_str for phrase in ["name or service not known", "dns", "connection aborted", "503 service unavailable", "failed to establish a new connection", "database connection", "googleauth", "refresherror", "refresh token", "credentials"]):
         return True
 
     return False

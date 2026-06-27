@@ -1,3 +1,4 @@
+import time
 import json
 import asyncio
 import logging
@@ -42,22 +43,55 @@ def callback_metadata_vectorized(message):
 
 
 def start_subscriber():
-    subscriber = pubsub_v1.SubscriberClient()
+    while True:
+        subscriber = None
+        future = None
+        try:
+            subscriber = pubsub_v1.SubscriberClient()
 
-    sub_path = subscriber.subscription_path(
-        settings.GCP_PROJECT_ID,
-        settings.PUBSUB_SUBSCRIPTION_METADATA_VECTORIZED
-    )
+            sub_path = subscriber.subscription_path(
+                settings.GCP_PROJECT_ID,
+                settings.PUBSUB_SUBSCRIPTION_METADATA_VECTORIZED
+            )
 
-    logger.info(f"Subscribing to metadata vectorized: {sub_path}")
-    future = subscriber.subscribe(
-        sub_path,
-        callback=callback_metadata_vectorized
-    )
+            logger.info(f"Subscribing to metadata vectorized: {sub_path}")
+            future = subscriber.subscribe(
+                sub_path,
+                callback=callback_metadata_vectorized
+            )
 
-    try:
-        logger.info("Target Inference Worker started. Listening on subscriptions...")
-        future.result()
-    except KeyboardInterrupt:
-        future.cancel()
-        logger.info("Target Inference Worker stopped.")
+            logger.info("Target Inference Worker started. Listening on subscriptions...")
+            
+            # Non-blocking poll loop to allow clean KeyboardInterrupt handling
+            while future.running():
+                time.sleep(1)
+                
+            if future.done() and future.exception():
+                future.result()
+
+        except KeyboardInterrupt:
+            logger.info("Target Inference Worker stopped by user.")
+            if future:
+                try:
+                    future.cancel()
+                except Exception:
+                    pass
+            if subscriber:
+                try:
+                    subscriber.close()
+                except Exception:
+                    pass
+            break
+        except Exception as e:
+            logger.error(f"Target Inference Subscriber encountered an error: {e}. Reconnecting in 10 seconds...", exc_info=True)
+            if future:
+                try:
+                    future.cancel()
+                except Exception:
+                    pass
+            if subscriber:
+                try:
+                    subscriber.close()
+                except Exception:
+                    pass
+            time.sleep(10)

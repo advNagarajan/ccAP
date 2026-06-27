@@ -1,3 +1,4 @@
+import time
 import json
 import asyncio
 import logging
@@ -45,23 +46,55 @@ def callback_metadata_extracted(message):
 
 
 def start_subscriber():
-    subscriber = pubsub_v1.SubscriberClient()
+    while True:
+        subscriber = None
+        metadata_future = None
+        try:
+            subscriber = pubsub_v1.SubscriberClient()
 
-    metadata_sub_path = subscriber.subscription_path(
-        settings.GCP_PROJECT_ID,
-        settings.PUBSUB_SUBSCRIPTION_METADATA_EXTRACTED
-    )
+            metadata_sub_path = subscriber.subscription_path(
+                settings.GCP_PROJECT_ID,
+                settings.PUBSUB_SUBSCRIPTION_METADATA_EXTRACTED
+            )
 
-    logger.info(f"Subscribing to metadata extracted: {metadata_sub_path}")
-    metadata_future = subscriber.subscribe(
-        metadata_sub_path,
-        callback=callback_metadata_extracted
-    )
+            logger.info(f"Subscribing to metadata extracted: {metadata_sub_path}")
+            metadata_future = subscriber.subscribe(
+                metadata_sub_path,
+                callback=callback_metadata_extracted
+            )
 
-    try:
-        # Keep main thread alive while future runs in background threads
-        logger.info("Metadata Vectorizer Worker started. Listening on subscriptions...")
-        metadata_future.result()
-    except KeyboardInterrupt:
-        metadata_future.cancel()
-        logger.info("Metadata Vectorizer Worker stopped.")
+            # Keep main thread alive while future runs in background threads
+            logger.info("Metadata Vectorizer Worker started. Listening on subscriptions...")
+            
+            while metadata_future.running():
+                time.sleep(1)
+                
+            if metadata_future.done() and metadata_future.exception():
+                metadata_future.result()
+
+        except KeyboardInterrupt:
+            logger.info("Metadata Vectorizer Worker stopped by user.")
+            if metadata_future:
+                try:
+                    metadata_future.cancel()
+                except Exception:
+                    pass
+            if subscriber:
+                try:
+                    subscriber.close()
+                except Exception:
+                    pass
+            break
+        except Exception as e:
+            logger.error(f"Metadata Vectorizer Subscriber encountered an error: {e}. Reconnecting in 10 seconds...", exc_info=True)
+            if metadata_future:
+                try:
+                    metadata_future.cancel()
+                except Exception:
+                    pass
+            if subscriber:
+                try:
+                    subscriber.close()
+                except Exception:
+                    pass
+            time.sleep(10)

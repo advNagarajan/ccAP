@@ -1,3 +1,4 @@
+import time
 import json
 import logging
 from google.cloud import pubsub_v1
@@ -9,7 +10,6 @@ from workers.notification.processor import process_notification
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("notification_worker")
 
-subscriber = pubsub_v1.SubscriberClient()
 
 def make_callback(topic_name: str):
     def callback(message):
@@ -26,6 +26,7 @@ def make_callback(topic_name: str):
             db.close()
     return callback
 
+
 def start_subscriber():
     subscriptions = {
         "job-completed": settings.PUBSUB_SUBSCRIPTION_JOB_COMPLETED,
@@ -35,29 +36,57 @@ def start_subscriber():
         "quality-check-completed": settings.PUBSUB_SUBSCRIPTION_QUALITY_CHECK_COMPLETED
     }
 
-    futures = []
-    for topic_name, sub_name in subscriptions.items():
-        if not sub_name:
-            logger.warning(f"Subscription for {topic_name} is not configured. Skipping.")
-            continue
-            
-        sub_path = subscriber.subscription_path(settings.GCP_PROJECT_ID, sub_name)
-        logger.info(f"Subscribing to subscription path: {sub_path}")
-        future = subscriber.subscribe(sub_path, callback=make_callback(topic_name))
-        futures.append(future)
+    while True:
+        subscriber = None
+        futures = []
+        try:
+            subscriber = pubsub_v1.SubscriberClient()
+            for topic_name, sub_name in subscriptions.items():
+                if not sub_name:
+                    logger.warning(f"Subscription for {topic_name} is not configured. Skipping.")
+                    continue
+                    
+                sub_path = subscriber.subscription_path(settings.GCP_PROJECT_ID, sub_name)
+                logger.info(f"Subscribing to subscription path: {sub_path}")
+                future = subscriber.subscribe(sub_path, callback=make_callback(topic_name))
+                futures.append(future)
 
-    logger.info("Notification subscriber started successfully. Listening for events...")
-    
-    try:
-        # Block and wait for termination
-        for future in futures:
-            try:
-                future.result()
-            except Exception as e:
-                logger.error(f"Error in subscriber future: {e}")
-    except KeyboardInterrupt:
-        logger.info("Stopping notification subscriber...")
-        for future in futures:
-            future.cancel()
-        logger.info("Subscriber stopped")
+            logger.info("Notification subscriber started successfully. Listening for events...")
+            
+            # Poll all futures to check if they are running
+            while futures and all(f.running() for f in futures):
+                time.sleep(1)
+                
+            # If any future stopped, get its result to raise the underlying exception
+            for f in futures:
+                if f.done() and f.exception():
+                    f.result()
+
+        except KeyboardInterrupt:
+            logger.info("Stopping notification subscriber...")
+            for future in futures:
+                try:
+                    future.cancel()
+                except Exception:
+                    pass
+            if subscriber:
+                try:
+                    subscriber.close()
+                except Exception:
+                    pass
+            logger.info("Subscriber stopped")
+            break
+        except Exception as e:
+            logger.error(f"Notification Subscriber encountered an error: {e}. Reconnecting in 10 seconds...", exc_info=True)
+            for future in futures:
+                try:
+                    future.cancel()
+                except Exception:
+                    pass
+            if subscriber:
+                try:
+                    subscriber.close()
+                except Exception:
+                    pass
+            time.sleep(10)
 

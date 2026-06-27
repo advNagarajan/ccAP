@@ -1,3 +1,4 @@
+import time
 import json
 import logging
 from google.cloud import pubsub_v1
@@ -56,22 +57,55 @@ def callback_target_inferred(message):
 
 
 def start_subscriber():
-    subscriber = pubsub_v1.SubscriberClient()
+    while True:
+        subscriber = None
+        validation_future = None
+        try:
+            subscriber = pubsub_v1.SubscriberClient()
 
-    validation_sub_path = subscriber.subscription_path(
-        settings.GCP_PROJECT_ID,
-        settings.PUBSUB_SUBSCRIPTION_TARGET_INFERRED
-    )
+            validation_sub_path = subscriber.subscription_path(
+                settings.GCP_PROJECT_ID,
+                settings.PUBSUB_SUBSCRIPTION_TARGET_INFERRED
+            )
 
-    logger.info(f"Subscribing to target inferred: {validation_sub_path}")
-    validation_future = subscriber.subscribe(
-        validation_sub_path,
-        callback=callback_target_inferred
-    )
+            logger.info(f"Subscribing to target inferred: {validation_sub_path}")
+            validation_future = subscriber.subscribe(
+                validation_sub_path,
+                callback=callback_target_inferred
+            )
 
-    try:
-        logger.info("Schema Validation Worker started. Listening on target-inferred subscriptions...")
-        validation_future.result()
-    except KeyboardInterrupt:
-        validation_future.cancel()
-        logger.info("Schema Validation Worker stopped.")
+            logger.info("Schema Validation Worker started. Listening on target-inferred subscriptions...")
+            
+            # Non-blocking poll loop to allow clean KeyboardInterrupt handling
+            while validation_future.running():
+                time.sleep(1)
+                
+            if validation_future.done() and validation_future.exception():
+                validation_future.result()
+
+        except KeyboardInterrupt:
+            logger.info("Schema Validation Worker stopped by user.")
+            if validation_future:
+                try:
+                    validation_future.cancel()
+                except Exception:
+                    pass
+            if subscriber:
+                try:
+                    subscriber.close()
+                except Exception:
+                    pass
+            break
+        except Exception as e:
+            logger.error(f"Schema Validation Subscriber encountered an error: {e}. Reconnecting in 10 seconds...", exc_info=True)
+            if validation_future:
+                try:
+                    validation_future.cancel()
+                except Exception:
+                    pass
+            if subscriber:
+                try:
+                    subscriber.close()
+                except Exception:
+                    pass
+            time.sleep(10)

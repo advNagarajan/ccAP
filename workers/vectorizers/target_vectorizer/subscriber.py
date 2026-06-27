@@ -1,3 +1,4 @@
+import time
 import json
 import asyncio
 import logging
@@ -115,36 +116,71 @@ def callback_feedback(message):
 
 
 def start_subscriber():
-    subscriber = pubsub_v1.SubscriberClient()
+    while True:
+        subscriber = None
+        mutation_future = None
+        feedback_future = None
+        try:
+            subscriber = pubsub_v1.SubscriberClient()
 
-    mutation_sub_path = subscriber.subscription_path(
-        settings.GCP_PROJECT_ID,
-        settings.PUBSUB_SUBSCRIPTION_TARGET_MUTATED
-    )
-    feedback_sub_path = subscriber.subscription_path(
-        settings.GCP_PROJECT_ID,
-        settings.PUBSUB_SUBSCRIPTION_FEEDBACK_SUBMITTED
-    )
+            mutation_sub_path = subscriber.subscription_path(
+                settings.GCP_PROJECT_ID,
+                settings.PUBSUB_SUBSCRIPTION_TARGET_MUTATED
+            )
+            feedback_sub_path = subscriber.subscription_path(
+                settings.GCP_PROJECT_ID,
+                settings.PUBSUB_SUBSCRIPTION_FEEDBACK_SUBMITTED
+            )
 
-    logger.info(f"Subscribing to target mutation: {mutation_sub_path}")
-    mutation_future = subscriber.subscribe(
-        mutation_sub_path,
-        callback=callback_mutation
-    )
+            logger.info(f"Subscribing to target mutation: {mutation_sub_path}")
+            mutation_future = subscriber.subscribe(
+                mutation_sub_path,
+                callback=callback_mutation
+            )
 
-    logger.info(f"Subscribing to feedback loop: {feedback_sub_path}")
-    feedback_future = subscriber.subscribe(
-        feedback_sub_path,
-        callback=callback_feedback
-    )
+            logger.info(f"Subscribing to feedback loop: {feedback_sub_path}")
+            feedback_future = subscriber.subscribe(
+                feedback_sub_path,
+                callback=callback_feedback
+            )
 
-    try:
-        # Keep main thread alive while futures run in background threads
-        # We can just wait for both results
-        # To avoid blocking indefinitely on one, we can run a loop or just wait on one
-        logger.info("Target Vectorizer Workers started. Listening on subscriptions...")
-        mutation_future.result()
-    except KeyboardInterrupt:
-        mutation_future.cancel()
-        feedback_future.cancel()
-        logger.info("Target Vectorizer Workers stopped.")
+            logger.info("Target Vectorizer Workers started. Listening on subscriptions...")
+            
+            # Poll both futures to make sure they are running
+            while mutation_future.running() and feedback_future.running():
+                time.sleep(1)
+                
+            # If any future stopped, retrieve its exception
+            if mutation_future.done() and mutation_future.exception():
+                mutation_future.result()
+            if feedback_future.done() and feedback_future.exception():
+                feedback_future.result()
+
+        except KeyboardInterrupt:
+            logger.info("Target Vectorizer Workers stopped by user.")
+            for f in (mutation_future, feedback_future):
+                if f:
+                    try:
+                        f.cancel()
+                    except Exception:
+                        pass
+            if subscriber:
+                try:
+                    subscriber.close()
+                except Exception:
+                    pass
+            break
+        except Exception as e:
+            logger.error(f"Target Vectorizer Subscriber encountered an error: {e}. Reconnecting in 10 seconds...", exc_info=True)
+            for f in (mutation_future, feedback_future):
+                if f:
+                    try:
+                        f.cancel()
+                    except Exception:
+                        pass
+            if subscriber:
+                try:
+                    subscriber.close()
+                except Exception:
+                    pass
+            time.sleep(10)

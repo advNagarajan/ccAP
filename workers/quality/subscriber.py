@@ -1,3 +1,4 @@
+import time
 import json
 import logging
 from google.cloud import pubsub_v1
@@ -48,22 +49,54 @@ def callback_quality_check_requested(message):
 
 
 def start_subscriber():
-    subscriber = pubsub_v1.SubscriberClient()
+    while True:
+        subscriber = None
+        quality_future = None
+        try:
+            subscriber = pubsub_v1.SubscriberClient()
 
-    quality_sub_path = subscriber.subscription_path(
-        settings.GCP_PROJECT_ID,
-        settings.PUBSUB_SUBSCRIPTION_QUALITY_CHECK_REQUESTED
-    )
+            quality_sub_path = subscriber.subscription_path(
+                settings.GCP_PROJECT_ID,
+                settings.PUBSUB_SUBSCRIPTION_QUALITY_CHECK_REQUESTED
+            )
 
-    logger.info(f"Subscribing to quality check requested: {quality_sub_path}")
-    quality_future = subscriber.subscribe(
-        quality_sub_path,
-        callback=callback_quality_check_requested
-    )
+            logger.info(f"Subscribing to quality check requested: {quality_sub_path}")
+            quality_future = subscriber.subscribe(
+                quality_sub_path,
+                callback=callback_quality_check_requested
+            )
 
-    try:
-        logger.info("Data Quality Worker started. Listening on quality-check-requested subscriptions...")
-        quality_future.result()
-    except KeyboardInterrupt:
-        quality_future.cancel()
-        logger.info("Data Quality Worker stopped.")
+            logger.info("Data Quality Worker started. Listening on quality-check-requested subscriptions...")
+            
+            while quality_future.running():
+                time.sleep(1)
+                
+            if quality_future.done() and quality_future.exception():
+                quality_future.result()
+
+        except KeyboardInterrupt:
+            logger.info("Data Quality Worker stopped by user.")
+            if quality_future:
+                try:
+                    quality_future.cancel()
+                except Exception:
+                    pass
+            if subscriber:
+                try:
+                    subscriber.close()
+                except Exception:
+                    pass
+            break
+        except Exception as e:
+            logger.error(f"Data Quality Subscriber encountered an error: {e}. Reconnecting in 10 seconds...", exc_info=True)
+            if quality_future:
+                try:
+                    quality_future.cancel()
+                except Exception:
+                    pass
+            if subscriber:
+                try:
+                    subscriber.close()
+                except Exception:
+                    pass
+            time.sleep(10)

@@ -242,3 +242,59 @@ def test_get_client_validation_errors():
 
     with pytest.raises(ValueError, match="Missing 'project_id'"):
         connector._get_client({"credentials_json": {"some": "info"}})
+
+
+@patch.object(BigQueryConnector, "_get_previous_update_time")
+@patch.object(BigQueryConnector, "_get_client")
+def test_extract_full_incremental(mock_get_client, mock_prev_time, mock_source):
+    mock_prev_time.return_value = datetime(2026, 6, 21, 13, 0, 0, tzinfo=timezone.utc)
+
+    mock_field = MagicMock()
+    mock_field.name = "updated_at"
+    mock_table = MagicMock()
+    mock_table.schema = [mock_field]
+
+    mock_client = MagicMock()
+    mock_client.project = "test-project"
+    mock_client.get_table.return_value = mock_table
+    mock_get_client.return_value = mock_client
+
+    mock_query_job = MagicMock()
+    mock_query_job.result.return_value = [{"id": 1}]
+    mock_client.query.return_value = mock_query_job
+
+    artifact = Artifact(
+        external_id="test_dataset:test_table:12345",
+        artifact_name="test_table",
+        last_modified="2026-06-21T13:20:00Z",
+        metadata={
+            "dataset": "test_dataset",
+            "table": "test_table",
+            "last_modified": "2026-06-21T13:20:00Z"
+        }
+    )
+
+    connector = BigQueryConnector()
+    connector.extract_full(mock_source, artifact)
+
+    mock_client.query.assert_called_once_with(
+        "SELECT * FROM `test-project.test_dataset.test_table` WHERE `updated_at` > '2026-06-21 13:00:00.000000 UTC'"
+    )
+
+
+@patch("app.connectors.bigquery_connector.SessionLocal")
+def test_get_previous_update_time(mock_session_cls):
+    mock_session = MagicMock()
+    mock_session_cls.return_value = mock_session
+    
+    mock_record = MagicMock()
+    mock_record.artifact_metadata = {"update_time": "2026-06-21T13:20:00Z"}
+    
+    mock_session.execute.return_value.scalars.return_value.first.return_value = mock_record
+
+    connector = BigQueryConnector()
+    prev_time = connector._get_previous_update_time("source-uuid")
+
+    assert prev_time is not None
+    assert prev_time.isoformat() == "2026-06-21T13:20:00+00:00"
+

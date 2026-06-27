@@ -1,8 +1,12 @@
 import json
 import logging
+from datetime import datetime
 from google.cloud import bigquery
 from google.oauth2 import service_account
+from sqlalchemy import select
 
+from app.db.database import SessionLocal
+from app.models.db.artifact_record import ArtifactRecord
 from app.connectors.base import BaseConnector
 from app.models.domain.artifact import Artifact
 from app.models.domain.raw_data import RawData
@@ -32,6 +36,25 @@ class BigQueryConnector(BaseConnector):
             project=project_id,
             credentials=credentials
         )
+
+    def _get_previous_update_time(self, source_id) -> datetime | None:
+        db = SessionLocal()
+        try:
+            last_record = db.execute(
+                select(ArtifactRecord)
+                .where(ArtifactRecord.source_id == source_id)
+                .where(ArtifactRecord.status == "PROCESSED")
+                .order_by(ArtifactRecord.processed_at.desc())
+            ).scalars().first()
+
+            if last_record and "update_time" in last_record.artifact_metadata:
+                try:
+                    return datetime.fromisoformat(last_record.artifact_metadata["update_time"])
+                except Exception:
+                    pass
+            return None
+        finally:
+            db.close()
 
     def list_artifacts(
         self,
@@ -65,6 +88,7 @@ class BigQueryConnector(BaseConnector):
                         "dataset": dataset_id,
                         "table": table_name,
                         "last_modified": last_modified_iso,
+                        "update_time": last_modified_iso,
                         "num_rows": table.num_rows,
                         "etag": external_id
                     }
@@ -139,16 +163,42 @@ class BigQueryConnector(BaseConnector):
         project_id = client.project
         table_ref = f"{project_id}.{dataset_id}.{table_name}"
 
+        # Get previous update time
+        previous_update_time = self._get_previous_update_time(source.source_id)
+
+        # Determine if we should query incrementally
+        incremental_column = source.connection_details.get("incremental_column")
+        
+        # If not specified, look up table schema to find common timestamp column names
+        if not incremental_column:
+            try:
+                table = client.get_table(table_ref)
+                schema_cols = [field.name.lower() for field in table.schema]
+                for candidate in ["updated_at", "modified_at", "update_time", "timestamp", "created_at"]:
+                    if candidate in schema_cols:
+                        incremental_column = next(field.name for field in table.schema if field.name.lower() == candidate)
+                        break
+            except Exception as e:
+                logger.warning(f"Failed to inspect schema for incremental columns: {e}")
+
+        # Build SQL query with limit or TABLESAMPLE if sample_ratio is provided
+        where_clause = ""
+        if previous_update_time and incremental_column:
+            # Format timestamp for BigQuery SQL
+            timestamp_str = previous_update_time.strftime("%Y-%m-%d %H:%M:%S.%f UTC")
+            where_clause = f" WHERE `{incremental_column}` > '{timestamp_str}'"
+
         if sample_ratio is not None:
             num_rows = artifact.metadata.get("num_rows", 10000)
             limit_count = max(1, int(num_rows * sample_ratio))
             if random_sample:
-                query = f"SELECT * FROM `{table_ref}` ORDER BY RAND() LIMIT {limit_count}"
+                query = f"SELECT * FROM `{table_ref}`{where_clause} ORDER BY RAND() LIMIT {limit_count}"
             else:
-                query = f"SELECT * FROM `{table_ref}` LIMIT {limit_count}"
+                query = f"SELECT * FROM `{table_ref}`{where_clause} LIMIT {limit_count}"
         else:
-            query = f"SELECT * FROM `{table_ref}`"
+            query = f"SELECT * FROM `{table_ref}`{where_clause}"
 
+        logger.info(f"BigQuery extract query: {query}")
         query_job = client.query(query)
         results = query_job.result()
 
@@ -194,6 +244,7 @@ class BigQueryConnector(BaseConnector):
                     "dataset": dataset_id,
                     "table": table_name,
                     "last_modified": last_modified_iso,
+                    "update_time": last_modified_iso,
                     "num_rows": table.num_rows,
                     "etag": external_id
                 }

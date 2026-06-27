@@ -144,8 +144,10 @@ async def infer_target_landing_zone(
                 source_embedding=profile.source_embedding,
                 predefined_target_ids=predefined_ids,
                 db=db,
+                connector_metadata=profile.metadata_json.get("connector_metadata"),
             )
         else:
+            logger.info("Executing Standard Target Inference (LLM)")
             if not candidates and not predefined_single:
                 logger.warning("No candidate targets found. Skipping selection.")
                 res_json = {
@@ -232,7 +234,8 @@ async def infer_target_landing_zone(
                 "inference_id": str(inference.inference_id),
                 "target_id": str(inference.target_id) if inference.target_id else None,
                 "confidence_score": float(inference.confidence_score),
-                "requires_review": inference.requires_review
+                "requires_review": inference.requires_review,
+                "execution_path": "AGENTIC" if enable_agentic else "LLM"
             }
         )
 

@@ -187,7 +187,8 @@ def test_run_inference_agent_wrapper():
                 source_json={"columns": []},
                 source_embedding=[0.1, 0.2],
                 predefined_target_ids=[],
-                db=db
+                db=db,
+                connector_metadata={"object_name": "src_table", "format_type": "csv"}
             )
             assert res["selected_target_id"] == agent_output["selected_target_id"]
             assert res["confidence_score"] == 0.95
@@ -209,7 +210,7 @@ def test_infer_target_landing_zone_routing():
             metadata_profile_id=profile_uuid,
             job_id=job_uuid,
             source_embedding=[0.1, 0.2],
-            metadata_json={"columns": []}
+            metadata_json={"columns": [], "connector_metadata": {"object_name": "src_table", "format_type": "csv"}}
         )
         job = Job(
             job_id=job_uuid,
@@ -263,7 +264,7 @@ def test_infer_target_landing_zone_routing():
         }
 
         with patch("workers.inference.processor.start_stage", return_value=mock_stage), \
-             patch("workers.inference.processor.complete_stage"), \
+             patch("workers.inference.processor.complete_stage") as mock_complete, \
              patch("workers.inference.processor.publish_target_inferred"), \
              patch("app.services.agents.inference_agent.run_inference_agent", new_callable=AsyncMock, return_value=mock_agent_output) as mock_agent:
 
@@ -275,5 +276,14 @@ def test_infer_target_landing_zone_routing():
             )
 
             mock_agent.assert_called_once()
+            # Verify connector_metadata is passed to run_inference_agent
+            called_kwargs = mock_agent.call_args[1]
+            assert called_kwargs["connector_metadata"] == {"object_name": "src_table", "format_type": "csv"}
+            
+            # Verify complete_stage is called with execution_path details
+            mock_complete.assert_called_once()
+            complete_details = mock_complete.call_args[1]["details"]
+            assert complete_details["execution_path"] == "AGENTIC"
 
     asyncio.run(run_async_test())
+

@@ -38,10 +38,11 @@ WORKFLOW:
    For any mapping where source and target types look different, call
    'check_type_compatibility' to verify.
 6. Recommend partitioning ONLY if a date, timestamp, or high-cardinality unique
-   ID column exists in the source. Include the column name and strategy
-   (e.g., 'partition by order_date MONTHLY').
+   ID column exists in the source. Include the column name and strategy, aligning
+   with the target database platform (target_type, e.g., POSTGRESQL, BIGQUERY, SNOWFLAKE, GCS, S3, DELTA).
 7. Suggest naming convention adjustments if source names don't follow the
-   target's conventions (e.g., camelCase source -> snake_case target).
+   target's conventions (e.g., camelCase source -> snake_case target), taking the target's
+   database platform casing rules into account.
 8. Optionally call 'get_feedback_guidelines' to check if engineers left notes
    about past inference decisions for this job.
 
@@ -67,6 +68,7 @@ async def run_inference_agent(
     source_embedding: list[float] | None,
     predefined_target_ids: list[str],
     db,  # SQLAlchemy Session
+    connector_metadata: dict | None = None,
 ) -> dict:
     """
     Initializes and executes the Inference Agent via ADK Runner.
@@ -94,11 +96,15 @@ async def run_inference_agent(
         session_service=session_service,
     )
 
-    # 3. Build the input message with the source schema
-    input_text = (
-        f"Analyze this source dataset and find the best target landing zone.\n\n"
-        f"Source Schema:\n{json.dumps(source_json, indent=2)}"
-    )
+    # 3. Build the input message with the source schema and metadata
+    input_text = "Analyze this source dataset and find the best target landing zone.\n\n"
+    if connector_metadata:
+        obj_name = connector_metadata.get("object_name", "Unknown")
+        fmt_type = connector_metadata.get("format_type", "Unknown")
+        input_text += f"Source Dataset Identity: {obj_name} (Format: {fmt_type})\n\n"
+    
+    input_text += f"Source Schema:\n{json.dumps(source_json, indent=2)}"
+
     content = types.Content(
         role="user",
         parts=[types.Part(text=input_text)]

@@ -1,5 +1,6 @@
 import time
 import json
+import logging
 from google.cloud import pubsub_v1
 
 from app.core.settings import settings
@@ -7,12 +8,15 @@ from app.db.database import SessionLocal
 from workers.metadata.processor import process_dataset_received
 from workers.common.retry_handler import handle_worker_failure, reset_retry_count
 
+logger = logging.getLogger("metadata_extraction")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+
 
 def callback(message):
     db = SessionLocal()
     job_id = None
     try:
-        print(f"Received message: {message.message_id}")
+        logger.info(f"Received message: {message.message_id}")
         payload = json.loads(message.data.decode("utf-8"))
         job_id = payload.get("job_id")
 
@@ -23,16 +27,10 @@ def callback(message):
         reset_retry_count(job_id, db)
         message.ack()
 
-        print(
-            f"Acknowledged message: "
-            f"{message.message_id}"
-        )
+        logger.info(f"Acknowledged message: {message.message_id}")
 
     except Exception as e:
-        print(
-            f"Message processing failed: "
-            f"{e}"
-        )
+        logger.error(f"Message processing failed: {e}", exc_info=True)
         handle_worker_failure(
             job_id=job_id,
             worker_name="metadata_extraction",
@@ -60,10 +58,7 @@ def start_subscriber():
                 callback=callback
             )
 
-            print(
-                f"Listening on "
-                f"{subscription_path}"
-            )
+            logger.info(f"Listening on {subscription_path}")
 
             while streaming_pull_future.running():
                 time.sleep(1)
@@ -72,7 +67,7 @@ def start_subscriber():
                 streaming_pull_future.result()
 
         except KeyboardInterrupt:
-            print("Subscriber stopped")
+            logger.info("Subscriber stopped")
             if streaming_pull_future:
                 try:
                     streaming_pull_future.cancel()
@@ -85,7 +80,7 @@ def start_subscriber():
                     pass
             break
         except Exception as e:
-            print(f"Metadata Extraction Subscriber encountered an error: {e}. Reconnecting in 10 seconds...")
+            logger.error(f"Metadata Extraction Subscriber encountered an error: {e}. Reconnecting in 10 seconds...", exc_info=True)
             if streaming_pull_future:
                 try:
                     streaming_pull_future.cancel()

@@ -1,4 +1,5 @@
 import json
+import logging
 from uuid import UUID
 
 from sqlalchemy import select
@@ -47,11 +48,11 @@ def process_dataset_received(message_data: bytes):
     metadata_stage = None
     publish_stage = None
 
+    logger = logging.getLogger("metadata_processor")
+
     try:
 
-        print()
-        print("=== DATASET RECEIVED ===")
-        print(payload)
+        logger.info(f"=== DATASET RECEIVED === payload={payload}")
 
         job = db.get(Job, job_id)
 
@@ -165,15 +166,11 @@ def process_dataset_received(message_data: bytes):
 
         db.commit()
 
-        print()
-        print("Metadata Profile Created")
-        print(f"Metadata Profile ID: {profile.metadata_profile_id}")
-        print(f"Artifact ID: {artifact_record.artifact_id}")
-        print()
+        logger.info(f"Metadata Profile Created. Profile ID: {profile.metadata_profile_id}, Artifact ID: {artifact_record.artifact_id}")
 
     except Exception as e:
 
-        print(f"Metadata extraction failed: {e}")
+        logger.error(f"Metadata extraction failed: {e}", exc_info=True)
 
         if metadata_stage is not None:
 

@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime, UTC
 from uuid import UUID
 
@@ -38,13 +39,17 @@ def process_ingestion_requested(message_data: bytes):
 
     try:
 
+    logger = logging.getLogger("ingestion_processor")
+
+    try:
+
         job = db.get(Job, job_id)
 
         if job is None:
-            print(f"Job {job_id} not found")
+            logger.warning(f"Job {job_id} not found")
             return
 
-        print(f"Processing job {job_id}")
+        logger.info(f"Processing job {job_id}")
 
         job.status = JobStatus.RUNNING
         job.current_stage = "Loading Source"
@@ -114,7 +119,7 @@ def process_ingestion_requested(message_data: bytes):
 
         if not unprocessed_artifacts:
 
-            print(
+            logger.info(
                 f"No unprocessed artifacts found for "
                 f"source {source.source_id}"
             )
@@ -214,7 +219,7 @@ def process_ingestion_requested(message_data: bytes):
                         existing_completed_report = db.execute(dq_report_stmt).scalars().first()
 
                         if existing_completed_report and not force_dq:
-                            print(
+                            logger.info(
                                 f"Data Quality report already completed (id={existing_completed_report.report_id}) "
                                 f"in lineage for artifact {artifact.artifact_name}. Skipping."
                             )
@@ -229,7 +234,7 @@ def process_ingestion_requested(message_data: bytes):
 
                             if existing_dq_job:
                                 quality_job_id = existing_dq_job.quality_job_id
-                                print(f"Reusing existing Data Quality Job {quality_job_id} for retry.")
+                                logger.info(f"Reusing existing Data Quality Job {quality_job_id} for retry.")
                             else:
                                 # Create new Quality Job and mapping
                                 dq_run_job = Job(
@@ -257,7 +262,7 @@ def process_ingestion_requested(message_data: bytes):
                                 artifact_id=artifact_record.artifact_id
                             )
 
-                print(
+                logger.info(
                     f"Processed {artifact.artifact_name} "
                     f"({record_count} records)"
                 )
@@ -275,13 +280,13 @@ def process_ingestion_requested(message_data: bytes):
                     db
                 )
 
-                print(
+                logger.error(
                     f"Failed artifact "
                     f"{artifact.artifact_name}: "
                     f"{artifact_error}"
                 )
 
-        print(
+        logger.info(
             f"Processed {len(unprocessed_artifacts)} artifacts "
             f"containing {total_records} records"
         )
@@ -296,14 +301,14 @@ def process_ingestion_requested(message_data: bytes):
             details
         )
 
-        print(
+        logger.info(
             f"Published dataset.received for "
             f"{len(unprocessed_artifacts)} artifacts"
         )
 
     except Exception as e:
 
-        print(f"Failed job {job_id}: {e}")
+        logger.error(f"Failed job {job_id}: {e}", exc_info=True)
 
         if 'acq_stage' in locals() and acq_stage is not None:
             try:

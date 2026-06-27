@@ -226,3 +226,55 @@ class GCSConnector(BaseConnector):
                 "etag": blob.etag
             }
         )
+
+    def write_data(
+        self,
+        connection_details: dict,
+        data: list[dict] | str | bytes,
+        format_type: str,
+        table_name: str,
+        write_mode: str = "APPEND",
+        key_columns: list[str] | None = None
+    ) -> None:
+        client = self._get_client(connection_details)
+        bucket_name = connection_details["bucket"]
+        prefix = connection_details.get("prefix", "").strip()
+
+        bucket = client.bucket(bucket_name)
+
+        # Build path
+        object_name = f"{prefix}/{table_name}" if prefix else table_name
+
+        if write_mode.upper() == "APPEND":
+            import time
+            import uuid
+            if "." in table_name:
+                base, ext = table_name.rsplit(".", 1)
+                suffix = f"_part_{int(time.time())}_{uuid.uuid4().hex[:6]}.{ext}"
+                object_name = f"{prefix}/{base}{suffix}" if prefix else f"{base}{suffix}"
+            else:
+                suffix = f"_part_{int(time.time())}_{uuid.uuid4().hex[:6]}"
+                object_name = f"{object_name}{suffix}"
+
+        blob = bucket.blob(object_name)
+
+        if isinstance(data, str):
+            content_type = "text/csv" if format_type.upper() == "CSV" else "application/json"
+            blob.upload_from_string(data, content_type=content_type)
+        elif isinstance(data, bytes):
+            content_type = "application/octet-stream" if format_type.upper() == "PARQUET" else "text/plain"
+            blob.upload_from_string(data if format_type.upper() == "PARQUET" else data.decode("utf-8"), content_type=content_type)
+        else:
+            import json
+            if format_type.upper() == "CSV":
+                import csv
+                from io import StringIO
+                output = StringIO()
+                if data:
+                    writer = csv.DictWriter(output, fieldnames=list(data[0].keys()))
+                    writer.writeheader()
+                    writer.writerows(data)
+                blob.upload_from_string(output.getvalue(), content_type="text/csv")
+            else:
+                json_content = json.dumps(data, default=str)
+                blob.upload_from_string(json_content, content_type="application/json")

@@ -252,3 +252,162 @@ class BigQueryConnector(BaseConnector):
         except Exception as e:
             logger.error(f"Failed to fetch BigQuery table metadata for get_artifact on {table_ref}: {e}")
             return None
+
+    def write_data(
+        self,
+        connection_details: dict,
+        data: list[dict] | str | bytes,
+        format_type: str,
+        table_name: str,
+        write_mode: str = "APPEND",
+        key_columns: list[str] | None = None
+    ) -> None:
+        client = self._get_client(connection_details)
+        dataset_id = connection_details.get("dataset")
+
+        if not dataset_id:
+            raise ValueError("Missing 'dataset' in connection details.")
+
+        table_ref = f"{client.project}.{dataset_id}.{table_name}"
+        write_mode_upper = write_mode.upper()
+
+        if write_mode_upper == "UPSERT":
+            if not key_columns:
+                raise ValueError("key_columns is required for UPSERT mode")
+
+            import uuid
+            staging_table_name = f"{table_name}_staging_{uuid.uuid4().hex[:8]}"
+            staging_ref = f"{client.project}.{dataset_id}.{staging_table_name}"
+
+            # Create an empty staging table with the same schema as the target
+            client.query(f"CREATE TABLE `{staging_ref}` LIKE `{table_ref}`").result()
+
+            try:
+                # Load incoming data into the staging table (always APPEND into staging)
+                self.write_data(
+                    connection_details=connection_details,
+                    data=data,
+                    format_type=format_type,
+                    table_name=staging_table_name,
+                    write_mode="APPEND"
+                )
+
+                # Get the schema columns to write the MERGE statement
+                target_table = client.get_table(table_ref)
+                columns = [field.name for field in target_table.schema]
+
+                on_clause = " AND ".join(f"T.`{k}` = S.`{k}`" for k in key_columns)
+                non_key_cols = [c for c in columns if c not in key_columns]
+                
+                if non_key_cols:
+                    update_clause = "WHEN MATCHED THEN UPDATE SET " + ", ".join(f"T.`{c}` = S.`{c}`" for c in non_key_cols)
+                else:
+                    update_clause = ""
+
+                insert_cols = ", ".join(f"`{c}`" for c in columns)
+                insert_vals = ", ".join(f"S.`{c}`" for c in columns)
+                insert_clause = f"WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({insert_vals})"
+
+                merge_query = f"""
+                MERGE `{table_ref}` T
+                USING `{staging_ref}` S
+                ON {on_clause}
+                {update_clause}
+                {insert_clause}
+                """
+                client.query(merge_query).result()
+
+            finally:
+                client.delete_table(staging_ref, not_found_ok=True)
+            return
+
+        # Handle APPEND or OVERWRITE
+        write_disposition = (
+            bigquery.WriteDisposition.WRITE_APPEND
+            if write_mode_upper == "APPEND"
+            else bigquery.WriteDisposition.WRITE_TRUNCATE
+        )
+
+        format_upper = format_type.upper()
+        if format_upper == "JSON":
+            source_format = bigquery.SourceFormat.NEWLINE_DELIMITED_JSON
+        elif format_upper == "CSV":
+            source_format = bigquery.SourceFormat.CSV
+        elif format_upper == "PARQUET":
+            source_format = bigquery.SourceFormat.PARQUET
+        else:
+            raise ValueError(f"Unsupported format type: {format_type}")
+
+        # Check if data represents GCS URIs
+        is_gcs_uri = False
+        if isinstance(data, str) and data.startswith("gs://"):
+            is_gcs_uri = True
+            uris = [data]
+        elif isinstance(data, list) and len(data) > 0 and isinstance(data[0], str) and data[0].startswith("gs://"):
+            is_gcs_uri = True
+            uris = data
+        elif isinstance(data, str) and data.strip().startswith("["):
+            try:
+                parsed = json.loads(data)
+                if isinstance(parsed, list) and len(parsed) > 0 and isinstance(parsed[0], str) and parsed[0].startswith("gs://"):
+                    is_gcs_uri = True
+                    uris = parsed
+            except Exception:
+                pass
+
+        job_config = bigquery.LoadJobConfig(
+            source_format=source_format,
+            write_disposition=write_disposition,
+            create_disposition=bigquery.CreateDisposition.CREATE_NEVER
+        )
+        if format_upper == "CSV":
+            job_config.skip_leading_rows = 1
+
+        if is_gcs_uri:
+            load_job = client.load_table_from_uri(uris, table_ref, job_config=job_config)
+            load_job.result()
+        else:
+            import io
+            if format_upper == "JSON":
+                if isinstance(data, str):
+                    data = data.strip()
+                    if data.startswith("["):
+                        records = json.loads(data)
+                        ndjson_str = "\n".join(json.dumps(r, default=str) for r in records)
+                    else:
+                        ndjson_str = data
+                    data_file = io.BytesIO(ndjson_str.encode("utf-8"))
+                elif isinstance(data, bytes):
+                    decoded = data.decode("utf-8").strip()
+                    if decoded.startswith("["):
+                        records = json.loads(decoded)
+                        ndjson_str = "\n".join(json.dumps(r, default=str) for r in records)
+                    else:
+                        ndjson_str = decoded
+                    data_file = io.BytesIO(ndjson_str.encode("utf-8"))
+                else:
+                    ndjson_str = "\n".join(json.dumps(r, default=str) for r in data)
+                    data_file = io.BytesIO(ndjson_str.encode("utf-8"))
+            elif format_upper == "CSV":
+                if isinstance(data, str):
+                    data_file = io.BytesIO(data.encode("utf-8"))
+                elif isinstance(data, bytes):
+                    data_file = io.BytesIO(data)
+                else:
+                    import csv
+                    output = io.StringIO()
+                    if data:
+                        writer = csv.DictWriter(output, fieldnames=list(data[0].keys()))
+                        writer.writeheader()
+                        writer.writerows(data)
+                    data_file = io.BytesIO(output.getvalue().encode("utf-8"))
+            elif format_upper == "PARQUET":
+                if isinstance(data, bytes):
+                    data_file = io.BytesIO(data)
+                else:
+                    raise ValueError("Parquet data must be provided as bytes")
+            else:
+                raise ValueError(f"Unhandled format: {format_type}")
+
+            load_job = client.load_table_from_file(data_file, table_ref, job_config=job_config)
+            load_job.result()

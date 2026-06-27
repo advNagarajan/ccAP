@@ -229,3 +229,14 @@ class FirestoreConnector(BaseConnector):
                 "etag": f"{collection_name}:{version_suffix}"
             }
         )
+
+    def write_data(
+        self,
+        connection_details: dict,
+        data: list[dict] | str | bytes,
+        format_type: str,
+        table_name: str,
+        write_mode: str = "APPEND",
+        key_columns: list[str] | None = None
+    ) -> None:
+        raise NotImplementedError("write_data is not implemented for FirestoreConnector")

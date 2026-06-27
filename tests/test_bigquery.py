@@ -1,6 +1,7 @@
 import json
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, ANY
+from google.cloud import bigquery
 
 import pytest
 
@@ -297,4 +298,123 @@ def test_get_previous_update_time(mock_session_cls):
 
     assert prev_time is not None
     assert prev_time.isoformat() == "2026-06-21T13:20:00+00:00"
+
+
+@patch.object(BigQueryConnector, "_get_client")
+def test_write_data_append_json(mock_get_client, mock_source):
+    mock_client = MagicMock()
+    mock_client.project = "test-project"
+    mock_get_client.return_value = mock_client
+
+    mock_job = MagicMock()
+    mock_client.load_table_from_file.return_value = mock_job
+
+    connector = BigQueryConnector()
+    connector.write_data(
+        connection_details=mock_source.connection_details,
+        data=[{"id": 1, "name": "Test"}],
+        format_type="JSON",
+        table_name="target_table",
+        write_mode="APPEND"
+    )
+
+    mock_client.load_table_from_file.assert_called_once()
+    args, kwargs = mock_client.load_table_from_file.call_args
+    job_config = kwargs["job_config"]
+    assert job_config.write_disposition == bigquery.WriteDisposition.WRITE_APPEND
+    assert job_config.create_disposition == bigquery.CreateDisposition.CREATE_NEVER
+    assert job_config.source_format == bigquery.SourceFormat.NEWLINE_DELIMITED_JSON
+
+
+@patch.object(BigQueryConnector, "_get_client")
+def test_write_data_overwrite_csv(mock_get_client, mock_source):
+    mock_client = MagicMock()
+    mock_client.project = "test-project"
+    mock_get_client.return_value = mock_client
+
+    mock_job = MagicMock()
+    mock_client.load_table_from_file.return_value = mock_job
+
+    connector = BigQueryConnector()
+    connector.write_data(
+        connection_details=mock_source.connection_details,
+        data="id,name\n1,Test",
+        format_type="CSV",
+        table_name="target_table",
+        write_mode="OVERWRITE"
+    )
+
+    mock_client.load_table_from_file.assert_called_once()
+    args, kwargs = mock_client.load_table_from_file.call_args
+    job_config = kwargs["job_config"]
+    assert job_config.write_disposition == bigquery.WriteDisposition.WRITE_TRUNCATE
+    assert job_config.create_disposition == bigquery.CreateDisposition.CREATE_NEVER
+    assert job_config.source_format == bigquery.SourceFormat.CSV
+    assert job_config.skip_leading_rows == 1
+
+
+@patch.object(BigQueryConnector, "_get_client")
+def test_write_data_upsert(mock_get_client, mock_source):
+    mock_client = MagicMock()
+    mock_client.project = "test-project"
+    mock_get_client.return_value = mock_client
+
+    mock_field1 = MagicMock()
+    mock_field1.name = "id"
+    mock_field2 = MagicMock()
+    mock_field2.name = "name"
+    mock_table = MagicMock()
+    mock_table.schema = [mock_field1, mock_field2]
+    mock_client.get_table.return_value = mock_table
+
+    mock_job = MagicMock()
+    mock_client.load_table_from_file.return_value = mock_job
+
+    connector = BigQueryConnector()
+    with patch.object(connector, "write_data", wraps=connector.write_data) as spy_write_data:
+        connector.write_data(
+            connection_details=mock_source.connection_details,
+            data=[{"id": 1, "name": "Test"}],
+            format_type="JSON",
+            table_name="target_table",
+            write_mode="UPSERT",
+            key_columns=["id"]
+        )
+
+        spy_write_data.assert_any_call(
+            connection_details=mock_source.connection_details,
+            data=[{"id": 1, "name": "Test"}],
+            format_type="JSON",
+            table_name=ANY,
+            write_mode="APPEND"
+        )
+
+    mock_client.query.assert_any_call(ANY)
+    mock_client.delete_table.assert_called_once()
+
+
+@patch.object(BigQueryConnector, "_get_client")
+def test_write_data_gcs_uri(mock_get_client, mock_source):
+    mock_client = MagicMock()
+    mock_client.project = "test-project"
+    mock_get_client.return_value = mock_client
+
+    mock_job = MagicMock()
+    mock_client.load_table_from_uri.return_value = mock_job
+
+    connector = BigQueryConnector()
+    connector.write_data(
+        connection_details=mock_source.connection_details,
+        data="gs://test-bucket/test-path/*.csv",
+        format_type="CSV",
+        table_name="target_table",
+        write_mode="APPEND"
+    )
+
+    mock_client.load_table_from_uri.assert_called_once_with(
+        ["gs://test-bucket/test-path/*.csv"],
+        "test-project.test_dataset.target_table",
+        job_config=ANY
+    )
+
 

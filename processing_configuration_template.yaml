@@ -94,6 +94,9 @@ drift_thresholds:
 predefined_target_ids:
   - "3fa85f64-5717-4562-b3fc-2c963f66afa6"
 
+# Threshold below which LLM target inference holds for human review (defaults to 0.70)
+inference_confidence_threshold: 0.70
+
 # ------------------------------------------------------------------------------
 # 5. Agentic AI Recommendation Pipeline
 # ------------------------------------------------------------------------------

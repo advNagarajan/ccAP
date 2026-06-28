@@ -178,7 +178,13 @@ async def infer_target_landing_zone(
         partitioning_rec = res_json.get("partitioning_recommendation")
         naming_suggestions = res_json.get("naming_convention_suggestions")
 
-        requires_review = confidence < settings.INFERENCE_CONFIDENCE_THRESHOLD
+        confidence_threshold = settings.INFERENCE_CONFIDENCE_THRESHOLD
+        if config_obj and isinstance(config_obj.config_content, dict):
+            confidence_threshold = float(config_obj.config_content.get(
+                "inference_confidence_threshold", confidence_threshold
+            ))
+
+        requires_review = confidence < confidence_threshold
         if predefined_single:
             requires_review = False
         

@@ -33,7 +33,8 @@ VALID_JOB_STATUSES = {
     JobStatus.COMPLETED,
     JobStatus.FAILED,
     JobStatus.CANCELLED,
-    JobStatus.RETRIED
+    JobStatus.RETRIED,
+    JobStatus.FALLBACK_DENIED
 }
 
 @router.get(

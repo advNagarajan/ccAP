@@ -268,6 +268,7 @@ def reject_fallback_request(
     # Update Job
     job = db.get(Job, request.job_id)
     if job:
+        job.status = "FALLBACK_DENIED"
         job.error_message = f"Fallback request rejected by user: {review_notes}"
 
     # Log Stage

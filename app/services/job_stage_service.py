@@ -223,7 +223,20 @@ def update_job_status_from_artifacts(job_uuid: UUID, db: Session):
     all_failed = all(s == "FAILED" for s in statuses)
     all_succeeded = all(s == "SUCCEEDED" for s in statuses)
     
-    if all_succeeded:
+    # Check if any fallback request was REJECTED for this job
+    has_rejected_fallback = any(
+        db.execute(
+            select(SchemaFallbackRequest).where(
+                SchemaFallbackRequest.job_id == job_uuid,
+                SchemaFallbackRequest.request_status == "REJECTED"
+            )
+        ).scalars().all()
+    )
+    
+    if has_rejected_fallback:
+        job.status = JobStatus.FALLBACK_DENIED
+        job.completed_at = datetime.now(UTC)
+    elif all_succeeded:
         job.status = JobStatus.COMPLETED
         job.error_message = None
         job.completed_at = datetime.now(UTC)

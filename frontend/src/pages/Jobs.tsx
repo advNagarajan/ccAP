@@ -923,25 +923,46 @@ export const Jobs: React.FC<JobsProps> = ({ setActiveTab }) => {
                                 }}
                                 style={{
                                   width: '100%',
-                                  backgroundColor: isFinalSelected ? 'rgba(16, 185, 129, 0.05)' : '#18181b',
-                                  border: `1px solid ${isFinalSelected ? '#10b981' : '#27272a'}`,
+                                  backgroundColor: isFinalSelected 
+                                    ? (art.fallback?.request_status === 'REJECTED' ? 'rgba(239, 68, 68, 0.05)' : 'rgba(16, 185, 129, 0.05)')
+                                    : '#18181b',
+                                  border: `1px solid ${
+                                    isFinalSelected 
+                                      ? (art.fallback?.request_status === 'REJECTED' ? '#ef4444' : '#10b981') 
+                                      : '#27272a'
+                                  }`,
                                   borderRadius: '8px',
                                   padding: '12px',
                                   cursor: 'pointer',
                                   transition: 'all 0.15s ease',
-                                  boxShadow: isFinalSelected ? '0 0 10px rgba(16, 185, 129, 0.15)' : 'none',
+                                  boxShadow: isFinalSelected 
+                                    ? (art.fallback?.request_status === 'REJECTED' ? '0 0 10px rgba(239, 68, 68, 0.15)' : '0 0 10px rgba(16, 185, 129, 0.15)')
+                                    : 'none',
                                 }}
                               >
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <span style={{ fontSize: '9px', fontWeight: 600, color: '#10b981', textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>
-                                    Stage 7: Landing Outcome
-                                    {renderRetryBadge('Schema Recommendation Generation')}
+                                  <span style={{ 
+                                    fontSize: '9px', 
+                                    fontWeight: 600, 
+                                    color: art.fallback 
+                                      ? (art.fallback.request_status === 'APPROVED' ? '#10b981' : art.fallback.request_status === 'REJECTED' ? '#ef4444' : '#f59e0b')
+                                      : '#10b981', 
+                                    textTransform: 'uppercase', 
+                                    display: 'inline-flex', 
+                                    alignItems: 'center' 
+                                  }}>
+                                    {art.fallback ? 'Fallback Decision' : 'Stage 7: Landing Outcome'}
+                                    {!art.fallback && renderRetryBadge('Schema Recommendation Generation')}
                                   </span>
                                   <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: getFinalStatusColor(art) }} />
                                 </div>
                                 <h6 style={{ fontSize: '11px', fontWeight: 600, color: '#fafafa', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                   {art.fallback
-                                    ? `Fallback (${art.fallback.request_status})`
+                                    ? (art.fallback.request_status === 'APPROVED'
+                                        ? 'Accepted'
+                                        : art.fallback.request_status === 'REJECTED'
+                                        ? 'Denied'
+                                        : 'Pending Review')
                                     : art.recommendation
                                     ? `Altered Schema (${art.recommendation.recommendation_status})`
                                     : art.target

@@ -1,4 +1,5 @@
 export const DEFAULT_API_URL = 'http://localhost:8000';
+import { getSessionCookie, removeSessionCookie } from './cookies';
 
 let apiRootUrl = import.meta.env.VITE_API_URL || DEFAULT_API_URL;
 
@@ -31,7 +32,7 @@ export async function request(path: string, options: RequestOptions = {}) {
     ...options.headers,
   };
 
-  const token = localStorage.getItem('auth_token');
+  const token = getSessionCookie('auth_token');
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
@@ -62,8 +63,8 @@ export async function request(path: string, options: RequestOptions = {}) {
   if (!response.ok) {
     const errorMsg = data?.detail || 'An unexpected error occurred';
     if (response.status === 401) {
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('auth_user');
+      removeSessionCookie('auth_token');
+      removeSessionCookie('auth_user');
       window.dispatchEvent(new Event('auth-logout'));
     }
     throw new Error(errorMsg);

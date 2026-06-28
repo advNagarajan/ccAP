@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { getSessionCookie, setSessionCookie, removeSessionCookie } from '../utils/cookies';
 
 export interface User {
   user_id: string;
@@ -24,16 +25,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const savedToken = localStorage.getItem('auth_token');
-    const savedUser = localStorage.getItem('auth_user');
+    const savedToken = getSessionCookie('auth_token');
+    const savedUser = getSessionCookie('auth_user');
 
     if (savedToken && savedUser) {
       setToken(savedToken);
       try {
         setUser(JSON.parse(savedUser));
       } catch (e) {
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('auth_user');
+        removeSessionCookie('auth_token');
+        removeSessionCookie('auth_user');
       }
     }
     setLoading(false);
@@ -48,15 +49,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = (newToken: string, newUser: User) => {
-    localStorage.setItem('auth_token', newToken);
-    localStorage.setItem('auth_user', JSON.stringify(newUser));
+    setSessionCookie('auth_token', newToken);
+    setSessionCookie('auth_user', JSON.stringify(newUser));
     setToken(newToken);
     setUser(newUser);
   };
 
   const logout = () => {
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('auth_user');
+    removeSessionCookie('auth_token');
+    removeSessionCookie('auth_user');
     setToken(null);
     setUser(null);
   };

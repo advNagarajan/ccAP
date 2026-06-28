@@ -18,6 +18,7 @@ import {
   Loader2,
   Sliders,
   KeyRound,
+  Settings,
 } from 'lucide-react';
 
 interface AppShellProps {
@@ -374,7 +375,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, activeTab, setActi
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <button
                 onClick={() => setIsPrefModalOpen(true)}
-                title="Notification Preferences"
+                title="Account Settings"
                 style={{
                   background: 'none',
                   border: 'none',
@@ -388,7 +389,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, activeTab, setActi
                 onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#27272a')}
                 onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
               >
-                <Bell size={16} color="#a1a1aa" />
+                <Settings size={16} color="#a1a1aa" />
               </button>
               <button
                 onClick={logout}

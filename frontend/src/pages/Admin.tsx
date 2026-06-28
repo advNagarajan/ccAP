@@ -45,10 +45,11 @@ export const Admin: React.FC = () => {
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const availableTopics = [
-    { id: 'job-completed', label: 'Job Completed' },
-    { id: 'job-failed', label: 'Job Failed' },
-    { id: 'fallback-requested', label: 'Fallback Requested' },
-    { id: 'dead-letter', label: 'Dead Letter Queue Alert' },
+    { id: 'job-completed', label: 'Job Completed', shortLabel: 'Completed' },
+    { id: 'job-failed', label: 'Job Failed', shortLabel: 'Failed' },
+    { id: 'fallback-requested', label: 'Fallback Requested', shortLabel: 'Fallback' },
+    { id: 'dead-letter', label: 'Dead Letter Queue Alert', shortLabel: 'DLQ' },
+    { id: 'quality-check-completed', label: 'Quality Check Completed', shortLabel: 'Quality' },
   ];
 
   const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
@@ -312,7 +313,7 @@ export const Admin: React.FC = () => {
                         )}
                       </td>
                       <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                        {!isOwner && !isSelf && (
+                        {!isOwner && !isSelf ? (
                           <button
                             onClick={() => handleDeleteUser(u.user_id, u.role, u.email)}
                             disabled={disabled}
@@ -335,6 +336,10 @@ export const Admin: React.FC = () => {
                               <Trash2 size={14} />
                             )}
                           </button>
+                        ) : (
+                          <span style={{ fontSize: '11px', color: '#71717a', fontStyle: 'italic' }}>
+                            {isOwner ? 'System Owner' : 'Active Session'}
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -369,7 +374,7 @@ export const Admin: React.FC = () => {
                         <th style={{ padding: '8px 12px', fontWeight: 600 }}>Recipient Email</th>
                         {availableTopics.map((t) => (
                           <th key={t.id} style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'center' }}>
-                            {t.label.split(' ')[0]}
+                            {t.shortLabel}
                           </th>
                         ))}
                         <th style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'right' }}>Actions</th>
@@ -421,93 +426,135 @@ export const Admin: React.FC = () => {
               )}
             </div>
 
-            {/* Register alert recipient */}
-            <div style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '24px' }}>
-              <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#fafafa', marginBottom: '4px' }}>
-                Add Alert Recipient
-              </h3>
-              <p style={{ color: '#a1a1aa', fontSize: '12px', marginBottom: '16px' }}>
-                Register a new email and check channels to alert.
-              </p>
+            {/* Right Column Stack */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Register alert recipient */}
+              <div style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '24px' }}>
+                <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#fafafa', marginBottom: '4px' }}>
+                  Add Alert Recipient
+                </h3>
+                <p style={{ color: '#a1a1aa', fontSize: '12px', marginBottom: '16px' }}>
+                  Register a new email and check channels to alert.
+                </p>
 
-              <form onSubmit={handleAddRecipient} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div>
-                  <label htmlFor="rec-email">Recipient Email Address *</label>
-                  <div style={{ position: 'relative' }}>
-                    <Mail
-                      size={14}
-                      color="#71717a"
-                      style={{
-                        position: 'absolute',
-                        left: '10px',
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                      }}
-                    />
-                    <input
-                      id="rec-email"
-                      type="email"
-                      placeholder="alerts@company.com"
-                      value={newEmail}
-                      onChange={(e) => setNewEmail(e.target.value)}
-                      required
-                      style={{ paddingLeft: '32px', fontSize: '13px', height: '36px' }}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#71717a' }}>Select Alert Channels</span>
-                  {availableTopics.map((topic) => {
-                    const isSelected = selectedTopics.includes(topic.id);
-                    return (
-                      <label
-                        key={topic.id}
+                <form onSubmit={handleAddRecipient} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div>
+                    <label htmlFor="rec-email">Recipient Email Address *</label>
+                    <div style={{ position: 'relative' }}>
+                      <Mail
+                        size={14}
+                        color="#71717a"
                         style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          fontSize: '12px',
-                          color: '#fafafa',
-                          cursor: 'pointer',
+                          position: 'absolute',
+                          left: '10px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
                         }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => handleTopicSelectionToggle(topic.id)}
-                        />
-                        <span>{topic.label}</span>
-                      </label>
-                    );
-                  })}
-                </div>
+                      />
+                      <input
+                        id="rec-email"
+                        type="email"
+                        placeholder="alerts@company.com"
+                        value={newEmail}
+                        onChange={(e) => setNewEmail(e.target.value)}
+                        required
+                        style={{ paddingLeft: '32px', fontSize: '13px', height: '36px' }}
+                      />
+                    </div>
+                  </div>
 
-                <button
-                  type="submit"
-                  disabled={submittingRecipient || !newEmail}
-                  className="btn"
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: '#71717a' }}>Select Alert Channels</span>
+                    {availableTopics.map((topic) => {
+                      const isSelected = selectedTopics.includes(topic.id);
+                      return (
+                        <label
+                          key={topic.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            fontSize: '12px',
+                            color: '#fafafa',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleTopicSelectionToggle(topic.id)}
+                          />
+                          <span>{topic.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={submittingRecipient || !newEmail}
+                    className="btn"
+                    style={{
+                      width: '100%',
+                      height: '36px',
+                      fontSize: '13px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      marginTop: '4px',
+                    }}
+                  >
+                    {submittingRecipient ? (
+                      <Loader2 className="animate-spin" size={14} />
+                    ) : (
+                      <>
+                        <Plus size={14} />
+                        <span>Subscribe Email</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              </div>
+
+              {/* Join Slack Notification Channels */}
+              <div style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#fafafa', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#ec4899' }}>
+                    <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+                  </svg>
+                  Join Slack Organization
+                </h3>
+                <p style={{ color: '#a1a1aa', fontSize: '12px' }}>
+                  Connect to the Meridien HQ workspace to join notification channels for pipeline runs, quality issues, and database changes.
+                </p>
+                <a
+                  href="https://join.slack.com/t/meridienhq/shared_invite/zt-41kigpo8l-eitR1oPLJkLKDPd2A_jzuA"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-secondary"
                   style={{
                     width: '100%',
                     height: '36px',
                     fontSize: '13px',
-                    display: 'flex',
+                    display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '6px',
-                    marginTop: '4px',
+                    gap: '8px',
+                    borderColor: 'rgba(236, 72, 153, 0.3)',
+                    color: '#fafafa',
+                    textDecoration: 'none'
                   }}
                 >
-                  {submittingRecipient ? (
-                    <Loader2 className="animate-spin" size={14} />
-                  ) : (
-                    <>
-                      <Plus size={14} />
-                      <span>Subscribe Email</span>
-                    </>
-                  )}
-                </button>
-              </form>
+                  {/* Slack SVG icon */}
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523 2.528 2.528 0 0 1-2.522-2.523 2.528 2.528 0 0 1 2.522-2.52h2.52v2.52zm1.261 0a2.528 2.528 0 0 1 2.52-2.52h5.043a2.528 2.528 0 0 1 2.522 2.52v5.042a2.528 2.528 0 0 1-2.522 2.52H8.823a2.528 2.528 0 0 1-2.52-2.52v-5.042zM8.823 5.043a2.528 2.528 0 0 1 2.52-2.52 2.528 2.528 0 0 1 2.522 2.52v2.52h-2.522a2.528 2.528 0 0 1-2.52-2.52zm0 1.261a2.528 2.528 0 0 1 2.52 2.52v5.043a2.528 2.528 0 0 1-2.52 2.522H3.78a2.528 2.528 0 0 1-2.52-2.522 2.528 2.528 0 0 1 2.52-2.52h5.043zm10.135 3.797a2.528 2.528 0 0 1 2.522-2.522 2.528 2.528 0 0 1 2.52 2.522 2.528 2.528 0 0 1-2.52 2.52h-2.522v-2.52zm-1.262 0a2.528 2.528 0 0 1-2.52 2.52h-5.043a2.528 2.528 0 0 1-2.522-2.52V3.78a2.528 2.528 0 0 1 2.522-2.52h5.043a2.528 2.528 0 0 1 2.52 2.52v5.042zm-3.781 10.136a2.528 2.528 0 0 1-2.52 2.522 2.528 2.528 0 0 1-2.522-2.522v-2.52h2.522a2.528 2.528 0 0 1 2.52 2.52zm0-1.262a2.528 2.528 0 0 1-2.52-2.52v-5.043a2.528 2.528 0 0 1 2.52-2.522h5.043a2.528 2.528 0 0 1 2.52 2.522v5.043H15.18z"/>
+                  </svg>
+                  <span>Join Meridien Slack</span>
+                </a>
+              </div>
             </div>
 
           </div>

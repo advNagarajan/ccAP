@@ -3,7 +3,6 @@ import { api } from '../utils/api';
 import {
   Server,
   Play,
-  Upload,
   Plus,
   X,
   FileCode,
@@ -72,7 +71,6 @@ export const Sources: React.FC = () => {
 
   // Ingest/Upload Loading States
   const [ingestingId, setIngestingId] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
 
   // Success Notification state
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);

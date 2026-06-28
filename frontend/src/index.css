@@ -247,3 +247,8 @@ label {
 .hover-config-parent:hover .hover-config-child {
   display: block;
 }
+
+/* Fix checkbox and radio width overrides */
+input[type="checkbox"], input[type="radio"] {
+  width: auto;
+}

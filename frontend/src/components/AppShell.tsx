@@ -113,6 +113,9 @@ export const AppShell: React.FC<AppShellProps> = ({ children, activeTab, setActi
           display: 'flex',
           flexDirection: 'column',
           flexShrink: 0,
+          position: 'sticky',
+          top: 0,
+          height: '100vh',
         }}
       >
         <div
@@ -151,6 +154,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, activeTab, setActi
             display: 'flex',
             flexDirection: 'column',
             gap: '4px',
+            overflowY: 'auto',
           }}
         >
           {menuItems.map((item) => {

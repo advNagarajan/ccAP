@@ -13,7 +13,17 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
 @router.post("/register", response_model=UserResponse, status_code=201)
-def register_user(payload: UserCreate, db: Session = Depends(get_db)):
+def register_user(
+    payload: UserCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role != "OWNER":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Only the Owner can create new users."
+        )
+
     # Check if email already exists
     stmt = select(User).where(User.email == payload.email)
     existing_user = db.execute(stmt).scalar_one_or_none()
@@ -23,6 +33,14 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)):
             detail="A user with this email already exists."
         )
 
+    # Validate role
+    target_role = payload.role.upper() if payload.role else "USER"
+    if target_role not in ("USER", "ADMIN"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid role. Must be 'ADMIN' or 'USER'."
+        )
+
     # Hash the password
     hashed = hash_password(payload.password)
 
@@ -30,7 +48,7 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)):
     new_user = User(
         email=payload.email,
         hashed_password=hashed,
-        role="USER"
+        role=target_role
     )
     db.add(new_user)
     db.commit()

@@ -40,6 +40,12 @@ export const Admin: React.FC = () => {
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
   const [submittingRecipient, setSubmittingRecipient] = useState(false);
 
+  // Create User Form State
+  const [createUserEmail, setCreateUserEmail] = useState('');
+  const [createUserPassword, setCreateUserPassword] = useState('');
+  const [createUserRole, setCreateUserRole] = useState('USER');
+  const [submittingUser, setSubmittingUser] = useState(false);
+
   // Loading indicator for actions
   const [actioningId, setActioningId] = useState<string | null>(null);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -193,6 +199,30 @@ export const Admin: React.FC = () => {
     }
   };
 
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createUserEmail || !createUserPassword) return;
+
+    setSubmittingUser(true);
+    try {
+      await api.post('/auth/register', {
+        email: createUserEmail,
+        password: createUserPassword,
+        role: createUserRole,
+      });
+
+      showNotification(`User account ${createUserEmail} created successfully.`);
+      setCreateUserEmail('');
+      setCreateUserPassword('');
+      setCreateUserRole('USER');
+      fetchAdminData();
+    } catch (err: any) {
+      showNotification(err.message || 'Failed to create user account', 'error');
+    } finally {
+      setSubmittingUser(false);
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
       {/* Page Header */}
@@ -250,103 +280,209 @@ export const Admin: React.FC = () => {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '32px' }}>
           
           {/* Section 1: User Management */}
-          <div style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '24px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#fafafa', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Users size={18} color="#0ea5e9" />
-              User Authorization Directory
-            </h3>
-            <p style={{ color: '#a1a1aa', fontSize: '13px', marginBottom: '20px' }}>
-              Control user privileges. Owner accounts have absolute permission defaults.
-            </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: '28px', alignItems: 'flex-start' }}>
+            
+            {/* User Directory */}
+            <div style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '24px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#fafafa', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Users size={18} color="#0ea5e9" />
+                User Authorization Directory
+              </h3>
+              <p style={{ color: '#a1a1aa', fontSize: '13px', marginBottom: '20px' }}>
+                Control user privileges. Owner accounts have absolute permission defaults.
+              </p>
 
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#27272a', color: '#fafafa', borderBottom: '1px solid #27272a' }}>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>User Email</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>User UUID</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Created At</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Role Context</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600, textAlign: 'right' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => {
-                  const isOwner = u.role === 'OWNER';
-                  const isSelf = u.user_id === currentUser?.user_id;
-                  const disabled = isOwner || isSelf || actioningId !== null;
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#27272a', color: '#fafafa', borderBottom: '1px solid #27272a' }}>
+                    <th style={{ padding: '12px 16px', fontWeight: 600 }}>User Email</th>
+                    <th style={{ padding: '12px 16px', fontWeight: 600 }}>User UUID</th>
+                    <th style={{ padding: '12px 16px', fontWeight: 600 }}>Created At</th>
+                    <th style={{ padding: '12px 16px', fontWeight: 600 }}>Role Context</th>
+                    <th style={{ padding: '12px 16px', fontWeight: 600, textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((u) => {
+                    const isOwner = u.role === 'OWNER';
+                    const isSelf = u.user_id === currentUser?.user_id;
+                    const disabled = isOwner || isSelf || actioningId !== null;
 
-                  return (
-                    <tr key={u.user_id} style={{ borderBottom: '1px solid #27272a' }}>
-                      <td style={{ padding: '14px 16px', color: '#fafafa', fontWeight: 500 }}>
-                        {u.email}
-                        {isSelf && <span style={{ marginLeft: '6px', fontSize: '10px', color: '#0ea5e9', backgroundColor: 'rgba(14, 165, 233, 0.1)', padding: '1px 6px', borderRadius: '4px' }}>You</span>}
-                      </td>
-                      <td style={{ padding: '14px 16px', color: '#71717a', fontFamily: 'monospace', fontSize: '11px' }}>
-                        {u.user_id}
-                      </td>
-                      <td style={{ padding: '14px 16px', color: '#a1a1aa' }}>
-                        {new Date(u.created_at).toLocaleDateString()}
-                      </td>
-                      <td style={{ padding: '14px 16px' }}>
-                        {isOwner ? (
-                          <span style={{ fontSize: '11px', fontWeight: 700, backgroundColor: 'rgba(14, 165, 233, 0.1)', color: '#0ea5e9', padding: '2px 8px', borderRadius: '4px' }}>
-                            OWNER
-                          </span>
-                        ) : (
-                          <select
-                            value={u.role}
-                            disabled={disabled}
-                            onChange={(e) => handleUpdateRole(u.user_id, u.role, e.target.value)}
-                            style={{
-                              backgroundColor: '#09090b',
-                              border: '1px solid #27272a',
-                              borderRadius: '4px',
-                              color: '#fafafa',
-                              padding: '2px 8px',
-                              fontSize: '12px',
-                              cursor: disabled ? 'not-allowed' : 'pointer',
-                            }}
-                          >
-                            <option value="USER">USER</option>
-                            <option value="ADMIN">ADMIN</option>
-                          </select>
-                        )}
-                      </td>
-                      <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                        {!isOwner && !isSelf ? (
-                          <button
-                            onClick={() => handleDeleteUser(u.user_id, u.role, u.email)}
-                            disabled={disabled}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              color: '#ef4444',
-                              cursor: disabled ? 'not-allowed' : 'pointer',
-                              padding: '6px',
-                              borderRadius: '4px',
-                              opacity: disabled ? 0.3 : 1,
-                            }}
-                            title="Delete User"
-                            onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-                          >
-                            {actioningId === u.user_id ? (
-                              <Loader2 className="animate-spin" size={14} />
-                            ) : (
-                              <Trash2 size={14} />
-                            )}
-                          </button>
-                        ) : (
-                          <span style={{ fontSize: '11px', color: '#71717a', fontStyle: 'italic' }}>
-                            {isOwner ? 'System Owner' : 'Active Session'}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                    return (
+                      <tr key={u.user_id} style={{ borderBottom: '1px solid #27272a' }}>
+                        <td style={{ padding: '14px 16px', color: '#fafafa', fontWeight: 500 }}>
+                          {u.email}
+                          {isSelf && <span style={{ marginLeft: '6px', fontSize: '10px', color: '#0ea5e9', backgroundColor: 'rgba(14, 165, 233, 0.1)', padding: '1px 6px', borderRadius: '4px' }}>You</span>}
+                        </td>
+                        <td style={{ padding: '14px 16px', color: '#71717a', fontFamily: 'monospace', fontSize: '11px' }}>
+                          {u.user_id}
+                        </td>
+                        <td style={{ padding: '14px 16px', color: '#a1a1aa' }}>
+                          {new Date(u.created_at).toLocaleDateString()}
+                        </td>
+                        <td style={{ padding: '14px 16px' }}>
+                          {isOwner ? (
+                            <span style={{ fontSize: '11px', fontWeight: 700, backgroundColor: 'rgba(14, 165, 233, 0.1)', color: '#0ea5e9', padding: '2px 8px', borderRadius: '4px' }}>
+                              OWNER
+                            </span>
+                          ) : (
+                            <select
+                              value={u.role}
+                              disabled={disabled}
+                              onChange={(e) => handleUpdateRole(u.user_id, u.role, e.target.value)}
+                              style={{
+                                backgroundColor: '#09090b',
+                                border: '1px solid #27272a',
+                                borderRadius: '4px',
+                                color: '#fafafa',
+                                padding: '2px 8px',
+                                fontSize: '12px',
+                                cursor: disabled ? 'not-allowed' : 'pointer',
+                              }}
+                            >
+                              <option value="USER">USER</option>
+                              <option value="ADMIN">ADMIN</option>
+                            </select>
+                          )}
+                        </td>
+                        <td style={{ padding: '14px 16px', textAlign: 'right' }}>
+                          {!isOwner && !isSelf ? (
+                            <button
+                              onClick={() => handleDeleteUser(u.user_id, u.role, u.email)}
+                              disabled={disabled}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#ef4444',
+                                cursor: disabled ? 'not-allowed' : 'pointer',
+                                padding: '6px',
+                                borderRadius: '4px',
+                                opacity: disabled ? 0.3 : 1,
+                              }}
+                              title="Delete User"
+                              onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                            >
+                              {actioningId === u.user_id ? (
+                                <Loader2 className="animate-spin" size={14} />
+                              ) : (
+                                <Trash2 size={14} />
+                              )}
+                            </button>
+                          ) : (
+                            <span style={{ fontSize: '11px', color: '#71717a', fontStyle: 'italic' }}>
+                              {isOwner ? 'System Owner' : 'Active Session'}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Create User Form */}
+            <div style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '24px' }}>
+              <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#fafafa', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Plus size={18} color="#0ea5e9" />
+                Create User Account
+              </h3>
+              {currentUser?.role === 'OWNER' ? (
+                <>
+                  <p style={{ color: '#a1a1aa', fontSize: '12px', marginBottom: '16px' }}>
+                    Provision credentials and select roles for new team members.
+                  </p>
+
+                  <form onSubmit={handleCreateUser} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div>
+                      <label htmlFor="user-email">Email Address *</label>
+                      <input
+                        id="user-email"
+                        type="email"
+                        placeholder="user@company.com"
+                        value={createUserEmail}
+                        onChange={(e) => setCreateUserEmail(e.target.value)}
+                        required
+                        style={{ fontSize: '13px', height: '36px' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="user-password">Password *</label>
+                      <input
+                        id="user-password"
+                        type="password"
+                        placeholder="••••••••"
+                        value={createUserPassword}
+                        onChange={(e) => setCreateUserPassword(e.target.value)}
+                        required
+                        style={{ fontSize: '13px', height: '36px' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="user-role">Assigned Authorization Role *</label>
+                      <select
+                        id="user-role"
+                        value={createUserRole}
+                        onChange={(e) => setCreateUserRole(e.target.value)}
+                        style={{
+                          backgroundColor: '#09090b',
+                          border: '1px solid #27272a',
+                          borderRadius: '6px',
+                          color: '#fafafa',
+                          padding: '8px 12px',
+                          fontSize: '13px',
+                          height: '36px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <option value="USER">USER (Read-Only Portal Operator)</option>
+                        <option value="ADMIN">ADMIN (Administrative Manager)</option>
+                      </select>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={submittingUser || !createUserEmail || !createUserPassword}
+                      className="btn"
+                      style={{
+                        width: '100%',
+                        height: '36px',
+                        fontSize: '13px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        backgroundColor: '#0ea5e9',
+                        color: '#fff',
+                        border: 'none',
+                        marginTop: '4px',
+                      }}
+                    >
+                      {submittingUser ? (
+                        <Loader2 className="animate-spin" size={14} />
+                      ) : (
+                        <>
+                          <Plus size={14} />
+                          <span>Create User</span>
+                        </>
+                      )}
+                    </button>
+                  </form>
+                </>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 10px', textAlign: 'center', gap: '12px' }}>
+                  <Shield size={36} color="#71717a" style={{ opacity: 0.5 }} />
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#fafafa' }}>Owner Privilege Required</span>
+                  <p style={{ color: '#71717a', fontSize: '12px', maxWidth: '240px', margin: 0 }}>
+                    Only the primary System Owner has access permissions to provision new user accounts.
+                  </p>
+                </div>
+              )}
+            </div>
+
           </div>
 
           {/* Section 2: Alert Channels Subscriptions */}

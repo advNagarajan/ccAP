@@ -177,3 +177,22 @@ async def test_sync_metadata_vector_execution(mock_publish, mock_get_embedding):
     assert mock_profile.source_embedding == [0.1, 0.2, 0.3]
     assert db_session.commit.call_count >= 1
     mock_publish.assert_called_once()
+
+
+def test_profiler_nested_structs():
+    # Test nested JSON structure profiling
+    records = [
+        {
+            "id": 1,
+            "info": {
+                "personal": {"first_name": "John", "last_name": "Doe"},
+                "tags": ["a", "b"]
+            }
+        }
+    ]
+    dataset = Dataset(records=records, source_type="GCS", format_type="JSON")
+    metadata = extract_metadata(dataset, connector_metadata={})
+    struct = metadata.structure
+    assert "info.personal.first_name" in struct.flattened_paths
+    assert "info.tags" in struct.array_fields
+    assert struct.max_depth == 3

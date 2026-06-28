@@ -281,3 +281,87 @@ async def test_process_quality_freshness_and_volume(mock_publish, mock_parsers, 
     assert report.report_json["rules"][0]["status"] == "FAILED" # Freshness failed
     assert report.report_json["rules"][1]["status"] == "PASSED" # Set membership passed
     assert report.report_json["rules"][2]["status"] == "PASSED" # Volume passed (prev count = 0, no change computed)
+
+
+@pytest.mark.anyio
+@patch("workers.quality.processor.CONNECTORS")
+@patch("workers.quality.processor.PARSERS")
+@patch("app.pubsub.publisher.publish_quality_check_completed")
+async def test_process_quality_timezone_freshness(mock_publish, mock_parsers, mock_connectors, mock_db_setup):
+    db, config, source, artifact, job = mock_db_setup
+
+    mock_connector = MagicMock()
+    mock_connectors.get.return_value = mock_connector
+    mock_raw_data = MagicMock()
+    mock_raw_data.format_type = "CSV"
+    mock_connector.extract_full.return_value = mock_raw_data
+
+    mock_parser = MagicMock()
+    mock_parsers.get.return_value = mock_parser
+    
+    # 2 hours ago but formatted with explicit timezone offset +05:30
+    tz_time = (datetime.now(UTC) - timedelta(hours=2) + timedelta(hours=5, minutes=30)).isoformat().replace("+00:00", "+05:30")
+    
+    mock_dataset = MagicMock()
+    mock_dataset.records = [{"updated_at": tz_time}]
+    mock_parser.parse.return_value = mock_dataset
+
+    config.config_content["data_quality_rules"] = [
+        {
+            "type": "freshness_check",
+            "column": "updated_at",
+            "max_age_hours": 3.0, # Pass: record is 2 hours old, max allowed is 3
+            "severity": "FAILED"
+        }
+    ]
+
+    report = process_data_quality(
+        job_id=str(uuid4()),
+        parent_job_id=str(uuid4()),
+        source_id=str(source.source_id),
+        artifact_id=str(artifact.artifact_id),
+        db=db
+    )
+
+    assert report.status == "PASSED"
+    assert report.report_json["rules"][0]["status"] == "PASSED"
+
+
+@pytest.mark.anyio
+@patch("workers.quality.processor.CONNECTORS")
+@patch("workers.quality.processor.PARSERS")
+@patch("app.pubsub.publisher.publish_quality_check_completed")
+async def test_process_quality_invalid_regex_pattern(mock_publish, mock_parsers, mock_connectors, mock_db_setup):
+    db, config, source, artifact, job = mock_db_setup
+
+    mock_connector = MagicMock()
+    mock_connectors.get.return_value = mock_connector
+    mock_raw_data = MagicMock()
+    mock_raw_data.format_type = "CSV"
+    mock_connector.extract_full.return_value = mock_raw_data
+
+    mock_parser = MagicMock()
+    mock_parsers.get.return_value = mock_parser
+    
+    mock_dataset = MagicMock()
+    mock_dataset.records = [{"email": "test"}]
+    mock_parser.parse.return_value = mock_dataset
+
+    config.config_content["data_quality_rules"] = [
+        {
+            "type": "regex_pattern_check",
+            "columns": {"email": "[invalid-regex"}, # Missing closing bracket
+            "severity": "FAILED"
+        }
+    ]
+
+    # Verify that compiling an invalid regex pattern raises an exception
+    with pytest.raises(Exception):
+        process_data_quality(
+            job_id=str(uuid4()),
+            parent_job_id=str(uuid4()),
+            source_id=str(source.source_id),
+            artifact_id=str(artifact.artifact_id),
+            db=db
+        )
+

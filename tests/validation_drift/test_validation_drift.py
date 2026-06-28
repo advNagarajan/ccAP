@@ -232,3 +232,45 @@ def test_validation_worker_pipeline(mock_publish):
     assert db_session.add.call_count >= 1
     db_session.commit.assert_called()
     mock_publish.assert_called_once()
+
+
+def test_schema_validation_compatibility_warnings():
+    # Test float mapped to INTEGER (causes type conversion warning/incompatibility)
+    metadata_json = {
+        "columns": [{"name": "price", "observed_types": ["float"]}]
+    }
+    schema_definition = {"id": "INTEGER"}
+    column_mapping = {"price": "id"}
+    
+    result = compute_schema_validation(
+        metadata_json=metadata_json,
+        schema_definition=schema_definition,
+        column_mapping=column_mapping,
+        unmapped_source_columns=[],
+        missing_target_columns=[],
+        warning_threshold=0.80
+    )
+    
+    assert result["validation_status"] == "WARNING"
+    assert len(result["report_json"]["datatype_issues"]) == 1
+    assert "Type conversion warning" in result["report_json"]["datatype_issues"][0]["reason"]
+
+
+def test_schema_drift_empty_target_catalog():
+    # Target catalog is completely empty
+    metadata_json = {
+        "columns": [{"name": "id", "observed_types": ["int"]}]
+    }
+    schema_definition = {}
+    column_mapping = {"id": None}
+    
+    result = compute_schema_drift(
+        metadata_json=metadata_json,
+        schema_definition=schema_definition,
+        column_mapping=column_mapping,
+        warning_threshold=20.0,
+        critical_threshold=50.0
+    )
+    
+    assert result["drift_score"] == 100.0
+    assert result["drift_status"] == "CRITICAL_DRIFT"

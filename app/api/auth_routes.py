@@ -5,7 +5,7 @@ from uuid import UUID
 
 from app.db.session import get_db
 from app.models.db.user import User
-from app.schemas.user_schema import UserCreate, UserLogin, UserResponse, TokenResponse, UserRoleUpdate
+from app.schemas.user_schema import UserCreate, UserLogin, UserResponse, TokenResponse, UserRoleUpdate, UserChangePassword
 from app.services.security import hash_password, verify_password
 from app.api.dependencies import get_current_user
 
@@ -158,4 +158,28 @@ def update_user_role(
     db.commit()
     db.refresh(user)
     return user
+
+
+@router.post("/change-password", status_code=status.HTTP_200_OK)
+def change_password(
+    payload: UserChangePassword,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Allows a logged-in user to change their password by validating the current password.
+    """
+    # Verify current password
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incorrect current password."
+        )
+
+    # Hash new password and save
+    current_user.hashed_password = hash_password(payload.new_password)
+    db.commit()
+    
+    return {"message": "Password changed successfully."}
+
 

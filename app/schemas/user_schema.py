@@ -34,3 +34,8 @@ class UserRoleUpdate(BaseModel):
     role: str
 
 
+class UserChangePassword(BaseModel):
+    current_password: str
+    new_password: str
+
+

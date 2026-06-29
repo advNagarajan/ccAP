@@ -1,0 +1,17 @@
+.git
+.gitignore
+.dockerignore
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+tests/
+frontend/node_modules/
+frontend/dist/
+frontend/.eslintcache
+*.log
+.env

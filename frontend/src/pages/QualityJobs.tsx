@@ -234,11 +234,29 @@ export const QualityJobs: React.FC<QualityJobsProps> = ({ setActiveTab }) => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div>
-        <h2 style={{ fontSize: '22px', fontWeight: 600, color: '#fafafa' }}>Data Quality Check Jobs</h2>
-        <p style={{ color: '#a1a1aa', fontSize: '14px', marginTop: '4px' }}>
-          Monitor rule-level completeness, uniqueness, and boundary value audits run against incoming datasets.
-        </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2 style={{ fontSize: '22px', fontWeight: 600, color: '#fafafa' }}>Data Quality Check Jobs</h2>
+          <p style={{ color: '#a1a1aa', fontSize: '14px', marginTop: '4px' }}>
+            Monitor rule-level completeness, uniqueness, and boundary value audits run against incoming datasets.
+          </p>
+        </div>
+        <button
+          onClick={fetchJobs}
+          disabled={loading}
+          className="btn btn-secondary"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            height: '36px',
+            padding: '0 16px',
+            fontSize: '13px',
+          }}
+        >
+          <RotateCcw size={14} className={loading ? "animate-spin" : ""} />
+          <span>Refresh</span>
+        </button>
       </div>
 
       {loading && jobs.length === 0 ? (

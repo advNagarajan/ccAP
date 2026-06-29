@@ -10,6 +10,7 @@ import {
   Layers,
   Database,
   X,
+  RotateCcw,
 } from 'lucide-react';
 
 interface FallbackRequest {
@@ -136,35 +137,47 @@ export const Fallback: React.FC = () => {
           </p>
         </div>
 
-        {/* Tab Filters */}
-        <div
-          style={{
-            display: 'flex',
-            backgroundColor: '#18181b',
-            border: '1px solid #27272a',
-            padding: '2px',
-            borderRadius: '6px',
-          }}
-        >
-          {['PENDING', 'APPROVED', 'REJECTED'].map((status) => (
-            <button
-              key={status}
-              onClick={() => setStatusFilter(status)}
-              style={{
-                border: 'none',
-                backgroundColor: statusFilter === status ? '#27272a' : 'transparent',
-                color: statusFilter === status ? '#fafafa' : '#a1a1aa',
-                padding: '6px 12px',
-                borderRadius: '4px',
-                fontSize: '12px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'background-color 0.15s',
-              }}
-            >
-              {status}
-            </button>
-          ))}
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button
+            onClick={fetchRequests}
+            disabled={loading}
+            className="btn btn-secondary"
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', height: '36px' }}
+          >
+            <RotateCcw size={14} className={loading ? "animate-spin" : ""} />
+            <span>Refresh</span>
+          </button>
+
+          {/* Tab Filters */}
+          <div
+            style={{
+              display: 'flex',
+              backgroundColor: '#18181b',
+              border: '1px solid #27272a',
+              padding: '2px',
+              borderRadius: '6px',
+            }}
+          >
+            {['PENDING', 'APPROVED', 'REJECTED'].map((status) => (
+              <button
+                key={status}
+                onClick={() => setStatusFilter(status)}
+                style={{
+                  border: 'none',
+                  backgroundColor: statusFilter === status ? '#27272a' : 'transparent',
+                  color: statusFilter === status ? '#fafafa' : '#a1a1aa',
+                  padding: '6px 12px',
+                  borderRadius: '4px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'background-color 0.15s',
+                }}
+              >
+                {status}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

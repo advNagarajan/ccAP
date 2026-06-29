@@ -163,6 +163,7 @@ export const Jobs: React.FC<JobsProps> = ({ setActiveTab }) => {
 
   // Triggering actions loading states
   const [actioningJobId, setActioningJobId] = useState<string | null>(null);
+  const [graphRefreshing, setGraphRefreshing] = useState(false);
 
   const fetchJobs = async () => {
     try {
@@ -250,6 +251,24 @@ export const Jobs: React.FC<JobsProps> = ({ setActiveTab }) => {
       alert(err.message || 'Failed to retry job');
     } finally {
       setActioningJobId(null);
+    }
+  };
+
+  const handleRefreshGraph = async () => {
+    if (!activeGraphJobId) return;
+    setGraphRefreshing(true);
+    try {
+      const [details, stages] = await Promise.all([
+        api.get(`/jobs/${activeGraphJobId}/details`),
+        api.get(`/jobs/${activeGraphJobId}/stages`),
+      ]);
+      setActiveGraphDetails(details);
+      setExpandedDetails(details);
+      setExpandedStages(stages || []);
+    } catch (err) {
+      console.error('Failed to refresh graph data', err);
+    } finally {
+      setGraphRefreshing(false);
     }
   };
 
@@ -479,6 +498,15 @@ export const Jobs: React.FC<JobsProps> = ({ setActiveTab }) => {
                 style={{ height: '32px', fontSize: '12px' }}
               >
                 ➔ Back to Ledger
+              </button>
+              <button
+                onClick={handleRefreshGraph}
+                disabled={graphRefreshing}
+                className="btn btn-secondary"
+                style={{ height: '32px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <RotateCcw size={12} className={graphRefreshing ? "animate-spin" : ""} />
+                <span>Refresh</span>
               </button>
               <h2 style={{ fontSize: '20px', fontWeight: 600, color: '#fafafa', margin: 0 }}>
                 Interactive Pipeline Graph
@@ -1526,11 +1554,29 @@ export const Jobs: React.FC<JobsProps> = ({ setActiveTab }) => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div>
-        <h2 style={{ fontSize: '22px', fontWeight: 600, color: '#fafafa' }}>Pipeline Ingestion Jobs</h2>
-        <p style={{ color: '#a1a1aa', fontSize: '14px', marginTop: '4px' }}>
-          Monitor running ingestion schemas, LLM inferences, validations, and manual recoveries.
-        </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2 style={{ fontSize: '22px', fontWeight: 600, color: '#fafafa' }}>Pipeline Ingestion Jobs</h2>
+          <p style={{ color: '#a1a1aa', fontSize: '14px', marginTop: '4px' }}>
+            Monitor running ingestion schemas, LLM inferences, validations, and manual recoveries.
+          </p>
+        </div>
+        <button
+          onClick={fetchJobs}
+          disabled={loading}
+          className="btn btn-secondary"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            height: '36px',
+            padding: '0 16px',
+            fontSize: '13px',
+          }}
+        >
+          <RotateCcw size={14} className={loading ? "animate-spin" : ""} />
+          <span>Refresh</span>
+        </button>
       </div>
 
       {loading && jobs.length === 0 ? (

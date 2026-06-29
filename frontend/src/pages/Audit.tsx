@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   Loader2,
   Terminal,
+  RotateCcw,
 } from 'lucide-react';
 
 interface AuditLog {
@@ -50,14 +51,32 @@ export const Audit: React.FC = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Page Header */}
-      <div>
-        <h2 style={{ fontSize: '22px', fontWeight: 600, color: '#fafafa', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <History size={22} color="#8b5cf6" />
-          System Audit Logs
-        </h2>
-        <p style={{ color: '#a1a1aa', fontSize: '14px', marginTop: '4px' }}>
-          Chronological record of manual engineering actions, operations, and schema mutations.
-        </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2 style={{ fontSize: '22px', fontWeight: 600, color: '#fafafa', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <History size={22} color="#8b5cf6" />
+            System Audit Logs
+          </h2>
+          <p style={{ color: '#a1a1aa', fontSize: '14px', marginTop: '4px' }}>
+            Chronological record of manual engineering actions, operations, and schema mutations.
+          </p>
+        </div>
+        <button
+          onClick={fetchLogs}
+          disabled={loading}
+          className="btn btn-secondary"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            height: '36px',
+            padding: '0 16px',
+            fontSize: '13px',
+          }}
+        >
+          <RotateCcw size={14} className={loading ? "animate-spin" : ""} />
+          <span>Refresh</span>
+        </button>
       </div>
 
       {loading && logs.length === 0 ? (

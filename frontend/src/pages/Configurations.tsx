@@ -12,6 +12,7 @@ import {
   Loader2,
   FileCode,
   SlidersHorizontal,
+  RotateCcw,
 } from 'lucide-react';
 
 interface Configuration {
@@ -189,27 +190,38 @@ export const Configurations: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => setIsUploadOpen(true)}
-          className="btn"
-          style={{
-            height: '38px',
-            padding: '0 16px',
-            backgroundColor: '#0ea5e9',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '13px',
-            fontWeight: 500,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}
-        >
-          <Upload size={14} />
-          <span>Upload YAML Configuration</span>
-        </button>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button
+            onClick={fetchConfigs}
+            disabled={loading}
+            className="btn btn-secondary"
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', height: '36px' }}
+          >
+            <RotateCcw size={14} className={loading ? "animate-spin" : ""} />
+            <span>Refresh</span>
+          </button>
+          <button
+            onClick={() => setIsUploadOpen(true)}
+            className="btn"
+            style={{
+              height: '36px',
+              padding: '0 16px',
+              backgroundColor: '#0ea5e9',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '13px',
+              fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            <Upload size={14} />
+            <span>Upload YAML Configuration</span>
+          </button>
+        </div>
       </div>
 
       {loading && configs.length === 0 ? (

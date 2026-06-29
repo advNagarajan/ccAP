@@ -97,6 +97,22 @@ export const DLQ: React.FC = () => {
             Audit broken landing pipelines, review infrastructure failure reasons, and execute manual recovery routines.
           </p>
         </div>
+        <button
+          onClick={fetchFailedJobs}
+          disabled={loading}
+          className="btn btn-secondary"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            height: '36px',
+            padding: '0 16px',
+            fontSize: '13px',
+          }}
+        >
+          <RotateCcw size={14} className={loading ? "animate-spin" : ""} />
+          <span>Refresh</span>
+        </button>
       </div>
 
       {/* Alert Banner */}

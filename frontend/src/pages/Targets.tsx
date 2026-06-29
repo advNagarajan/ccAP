@@ -9,6 +9,7 @@ import {
   Loader2,
   Calendar,
   Grid,
+  RotateCcw,
 } from 'lucide-react';
 
 interface Target {
@@ -131,14 +132,25 @@ export const Targets: React.FC = () => {
             Browse registered target databases, schemas, and metadata catalogs.
           </p>
         </div>
-        <button
-          onClick={() => setIsRegisterOpen(true)}
-          className="btn"
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px' }}
-        >
-          <Plus size={16} />
-          <span>Register Target Catalog</span>
-        </button>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button
+            onClick={fetchTargets}
+            disabled={loading}
+            className="btn btn-secondary"
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', height: '36px' }}
+          >
+            <RotateCcw size={14} className={loading ? "animate-spin" : ""} />
+            <span>Refresh</span>
+          </button>
+          <button
+            onClick={() => setIsRegisterOpen(true)}
+            className="btn"
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', height: '36px' }}
+          >
+            <Plus size={16} />
+            <span>Register Target Catalog</span>
+          </button>
+        </div>
       </div>
 
       {/* Notifications */}

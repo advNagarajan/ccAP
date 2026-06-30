@@ -66,37 +66,65 @@ class BigQueryConnector(BaseConnector):
 
         if not dataset_id:
             raise ValueError("Missing 'dataset' in connection details.")
-        if not table_name:
-            raise ValueError("Missing 'table' in connection details.")
 
         client = self._get_client(connection_details)
         project_id = client.project
-        table_ref = f"{project_id}.{dataset_id}.{table_name}"
 
-        try:
-            table = client.get_table(table_ref)
-            last_modified_iso = table.modified.isoformat()
-            version_suffix = str(int(table.modified.timestamp()))
-            external_id = f"{dataset_id}:{table_name}:{version_suffix}"
+        if table_name:
+            table_ref = f"{project_id}.{dataset_id}.{table_name}"
+            try:
+                table = client.get_table(table_ref)
+                last_modified_iso = table.modified.isoformat()
+                version_suffix = str(int(table.modified.timestamp()))
+                external_id = f"{dataset_id}:{table_name}:{version_suffix}"
 
-            return [
-                Artifact(
-                    external_id=external_id,
-                    artifact_name=table_name,
-                    last_modified=last_modified_iso,
-                    metadata={
-                        "dataset": dataset_id,
-                        "table": table_name,
-                        "last_modified": last_modified_iso,
-                        "update_time": last_modified_iso,
-                        "num_rows": table.num_rows,
-                        "etag": external_id
-                    }
-                )
-            ]
-        except Exception as e:
-            logger.error(f"Failed to fetch BigQuery table metadata for {table_ref}: {e}")
-            return []
+                return [
+                    Artifact(
+                        external_id=external_id,
+                        artifact_name=table_name,
+                        last_modified=last_modified_iso,
+                        metadata={
+                            "dataset": dataset_id,
+                            "table": table_name,
+                            "last_modified": last_modified_iso,
+                            "update_time": last_modified_iso,
+                            "num_rows": table.num_rows,
+                            "etag": external_id
+                        }
+                    )
+                ]
+            except Exception as e:
+                logger.error(f"Failed to fetch BigQuery table metadata for {table_ref}: {e}")
+                return []
+        else:
+            try:
+                tables = client.list_tables(f"{project_id}.{dataset_id}")
+                artifacts = []
+                for table_item in tables:
+                    table = client.get_table(table_item.reference)
+                    last_modified_iso = table.modified.isoformat()
+                    version_suffix = str(int(table.modified.timestamp()))
+                    external_id = f"{dataset_id}:{table.table_id}:{version_suffix}"
+
+                    artifacts.append(
+                        Artifact(
+                            external_id=external_id,
+                            artifact_name=table.table_id,
+                            last_modified=last_modified_iso,
+                            metadata={
+                                "dataset": dataset_id,
+                                "table": table.table_id,
+                                "last_modified": last_modified_iso,
+                                "update_time": last_modified_iso,
+                                "num_rows": table.num_rows,
+                                "etag": external_id
+                            }
+                        )
+                    )
+                return artifacts
+            except Exception as e:
+                logger.error(f"Failed to list BigQuery tables for dataset {dataset_id}: {e}")
+                return []
 
     def get_unprocessed_artifacts(
         self,

@@ -69,6 +69,74 @@ def test_list_artifacts_error(mock_get_client, mock_source):
 
 
 @patch.object(BigQueryConnector, "_get_client")
+def test_list_artifacts_dataset_success(mock_get_client):
+    source = Source(
+        source_id="b041cfb2-1324-4eb9-a799-a4195152865c",
+        name="BigQuery Dataset Source",
+        source_type="BIGQUERY",
+        connection_details={
+            "dataset": "test_dataset",
+            "project_id": "test-project",
+            "credentials_json": {"type": "service_account"}
+        },
+        status="ACTIVE"
+    )
+
+    mock_table1_item = MagicMock()
+    mock_table1_item.reference = "test-project.test_dataset.table1"
+    mock_table1_item.table_id = "table1"
+
+    mock_table2_item = MagicMock()
+    mock_table2_item.reference = "test-project.test_dataset.table2"
+    mock_table2_item.table_id = "table2"
+
+    mock_table1 = MagicMock()
+    mock_table1.table_id = "table1"
+    mock_table1.num_rows = 1000
+    mock_time1 = datetime(2026, 6, 21, 13, 20, 0, tzinfo=timezone.utc)
+    mock_table1.modified = mock_time1
+
+    mock_table2 = MagicMock()
+    mock_table2.table_id = "table2"
+    mock_table2.num_rows = 2000
+    mock_time2 = datetime(2026, 6, 22, 14, 30, 0, tzinfo=timezone.utc)
+    mock_table2.modified = mock_time2
+
+    mock_client = MagicMock()
+    mock_client.project = "test-project"
+    mock_client.list_tables.return_value = [mock_table1_item, mock_table2_item]
+    
+    def get_table_side_effect(ref):
+        if "table1" in str(ref):
+            return mock_table1
+        elif "table2" in str(ref):
+            return mock_table2
+        raise Exception("Table not found")
+        
+    mock_client.get_table.side_effect = get_table_side_effect
+    mock_get_client.return_value = mock_client
+
+    connector = BigQueryConnector()
+    artifacts = connector.list_artifacts(source)
+
+    assert len(artifacts) == 2
+    
+    art1 = artifacts[0]
+    assert art1.artifact_name == "table1"
+    assert art1.last_modified == mock_time1.isoformat()
+    assert art1.external_id == f"test_dataset:table1:{int(mock_time1.timestamp())}"
+    assert art1.metadata["num_rows"] == 1000
+
+    art2 = artifacts[1]
+    assert art2.artifact_name == "table2"
+    assert art2.last_modified == mock_time2.isoformat()
+    assert art2.external_id == f"test_dataset:table2:{int(mock_time2.timestamp())}"
+    assert art2.metadata["num_rows"] == 2000
+
+    mock_client.list_tables.assert_called_once_with("test-project.test_dataset")
+
+
+@patch.object(BigQueryConnector, "_get_client")
 def test_extract_sample(mock_get_client, mock_source):
     mock_row1 = {"id": 1, "name": "Alice"}
     mock_row2 = {"id": 2, "name": "Bob"}

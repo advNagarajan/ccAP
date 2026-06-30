@@ -245,3 +245,141 @@ def test_get_previous_update_time(mock_session_cls):
 
     assert prev_time is not None
     assert prev_time.isoformat() == "2026-06-21T13:20:00+00:00"
+
+
+@patch.object(FirestoreConnector, "_get_client")
+def test_write_data_append_json(mock_get_client, mock_source):
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    
+    mock_batch = MagicMock()
+    mock_client.batch.return_value = mock_batch
+    
+    mock_collection = MagicMock()
+    mock_client.collection.return_value = mock_collection
+    
+    mock_doc_ref = MagicMock()
+    mock_collection.document.return_value = mock_doc_ref
+
+    connector = FirestoreConnector()
+    connector.write_data(
+        connection_details=mock_source.connection_details,
+        data=[{"id": "doc123", "name": "Alice"}],
+        format_type="JSON",
+        table_name="test_collection",
+        write_mode="APPEND"
+    )
+
+    mock_client.collection.assert_called_once_with("test_collection")
+    mock_collection.document.assert_called_once_with("doc123")
+    mock_batch.set.assert_called_once_with(mock_doc_ref, {"id": "doc123", "name": "Alice"})
+    mock_batch.commit.assert_called_once()
+
+
+@patch.object(FirestoreConnector, "_get_client")
+def test_write_data_overwrite_csv(mock_get_client, mock_source):
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    
+    mock_batch = MagicMock()
+    mock_client.batch.return_value = mock_batch
+    
+    mock_collection = MagicMock()
+    mock_client.collection.return_value = mock_collection
+    
+    mock_existing_doc = MagicMock()
+    mock_existing_doc.reference = "existing_ref"
+    mock_collection.select.return_value.stream.return_value = [mock_existing_doc]
+    
+    mock_doc_ref = MagicMock()
+    mock_collection.document.return_value = mock_doc_ref
+
+    csv_data = "id,name\n456,Bob"
+
+    connector = FirestoreConnector()
+    connector.write_data(
+        connection_details=mock_source.connection_details,
+        data=csv_data,
+        format_type="CSV",
+        table_name="test_collection",
+        write_mode="OVERWRITE"
+    )
+
+    mock_batch.delete.assert_called_once_with("existing_ref")
+    mock_collection.document.assert_called_once_with("456")
+    mock_batch.set.assert_called_once_with(mock_doc_ref, {"id": "456", "name": "Bob"})
+
+
+@patch.object(FirestoreConnector, "_get_client")
+def test_write_data_upsert(mock_get_client, mock_source):
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    
+    mock_batch = MagicMock()
+    mock_client.batch.return_value = mock_batch
+    
+    mock_collection = MagicMock()
+    mock_client.collection.return_value = mock_collection
+    
+    mock_doc_ref = MagicMock()
+    mock_collection.document.return_value = mock_doc_ref
+
+    connector = FirestoreConnector()
+    connector.write_data(
+        connection_details=mock_source.connection_details,
+        data=[{"first_name": "Charlie", "last_name": "Brown", "age": 8}],
+        format_type="JSON",
+        table_name="test_collection",
+        write_mode="UPSERT",
+        key_columns=["first_name", "last_name"]
+    )
+
+    mock_collection.document.assert_called_once_with("Charlie_Brown")
+    mock_batch.set.assert_called_once_with(mock_doc_ref, {"first_name": "Charlie", "last_name": "Brown", "age": 8}, merge=True)
+
+
+@patch.object(FirestoreConnector, "_get_client")
+def test_write_data_invalid_arguments(mock_get_client, mock_source):
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+
+    connector = FirestoreConnector()
+    
+    # 1. Invalid write mode
+    with pytest.raises(ValueError, match="Unsupported write mode"):
+        connector.write_data(
+            connection_details=mock_source.connection_details,
+            data=[],
+            format_type="JSON",
+            table_name="test_collection",
+            write_mode="INVALID"
+        )
+        
+    # 2. Invalid format type
+    with pytest.raises(ValueError, match="Unsupported format type"):
+        connector.write_data(
+            connection_details=mock_source.connection_details,
+            data="raw data",
+            format_type="PARQUET",
+            table_name="test_collection",
+            write_mode="APPEND"
+        )
+
+    # 3. Missing collection name
+    with pytest.raises(ValueError, match="Missing collection name"):
+        connector.write_data(
+            connection_details={},
+            data=[],
+            format_type="JSON",
+            table_name=""
+        )
+
+    # 4. Upsert without keys
+    with pytest.raises(ValueError, match="UPSERT mode requires key_columns"):
+        connector.write_data(
+            connection_details=mock_source.connection_details,
+            data=[{"name": "NoId"}],
+            format_type="JSON",
+            table_name="test_collection",
+            write_mode="UPSERT"
+        )

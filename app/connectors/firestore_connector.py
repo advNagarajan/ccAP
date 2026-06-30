@@ -239,4 +239,102 @@ class FirestoreConnector(BaseConnector):
         write_mode: str = "APPEND",
         key_columns: list[str] | None = None
     ) -> None:
-        raise NotImplementedError("write_data is not implemented for FirestoreConnector")
+        import csv
+        from io import StringIO
+
+        collection_name = table_name or connection_details.get("collection")
+        if not collection_name:
+            raise ValueError("Missing collection name. Provide a table_name or collection in connection details.")
+
+        write_mode_upper = write_mode.upper()
+        if write_mode_upper not in ["APPEND", "OVERWRITE", "UPSERT"]:
+            raise ValueError(f"Unsupported write mode: {write_mode}")
+
+        client = self._get_client(connection_details)
+        collection_ref = client.collection(collection_name)
+
+        # Parse data into list of dicts
+        records = []
+        if isinstance(data, list):
+            records = data
+        elif isinstance(data, dict):
+            records = [data]
+        elif isinstance(data, (str, bytes)):
+            if isinstance(data, bytes):
+                content = data.decode("utf-8")
+            else:
+                content = data
+
+            format_upper = format_type.upper()
+            if format_upper == "JSON":
+                try:
+                    parsed = json.loads(content)
+                    if isinstance(parsed, list):
+                        records = parsed
+                    elif isinstance(parsed, dict):
+                        records = [parsed]
+                    else:
+                        raise ValueError("Parsed JSON is not a list or dictionary.")
+                except Exception as e:
+                    raise ValueError(f"Failed to parse JSON data: {e}")
+            elif format_upper == "CSV":
+                try:
+                    reader = csv.DictReader(StringIO(content))
+                    records = list(reader)
+                except Exception as e:
+                    raise ValueError(f"Failed to parse CSV data: {e}")
+            else:
+                raise ValueError(f"Unsupported format type: {format_type}")
+        else:
+            raise ValueError(f"Unsupported data type: {type(data)}")
+
+        # Handle OVERWRITE mode: Delete all existing documents in the collection first
+        if write_mode_upper == "OVERWRITE":
+            docs = collection_ref.select([]).stream()
+            batch = client.batch()
+            count = 0
+            for doc in docs:
+                batch.delete(doc.reference)
+                count += 1
+                if count >= 500:
+                    batch.commit()
+                    batch = client.batch()
+                    count = 0
+            if count > 0:
+                batch.commit()
+
+        # Write/Update documents using Batch Writer
+        batch = client.batch()
+        count = 0
+        for doc in records:
+            if not isinstance(doc, dict):
+                raise ValueError("Record data must be a dictionary/document object.")
+
+            doc_id = None
+            if key_columns:
+                doc_id = "_".join(str(doc.get(k)) for k in key_columns if doc.get(k) is not None)
+            else:
+                for candidate in ["id", "_id"]:
+                    if candidate in doc and doc[candidate] is not None:
+                        doc_id = str(doc[candidate])
+                        break
+
+            if doc_id:
+                doc_ref = collection_ref.document(doc_id)
+            else:
+                if write_mode_upper == "UPSERT":
+                    raise ValueError("UPSERT mode requires key_columns or an 'id'/'_id' field in the document to determine the document ID.")
+                doc_ref = collection_ref.document()
+
+            if write_mode_upper == "UPSERT":
+                batch.set(doc_ref, doc, merge=True)
+            else:
+                batch.set(doc_ref, doc)
+
+            count += 1
+            if count >= 500:
+                batch.commit()
+                batch = client.batch()
+                count = 0
+        if count > 0:
+            batch.commit()

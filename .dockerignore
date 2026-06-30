@@ -15,3 +15,6 @@ frontend/dist/
 frontend/.eslintcache
 *.log
 .env
+.env.example
+README.md
+*.md

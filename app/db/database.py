@@ -4,13 +4,7 @@ from pgvector.psycopg2 import register_vector
 
 from app.core.settings import settings
 
-DATABASE_URL = (
-    f"postgresql://{settings.DB_USER}:"
-    f"{settings.DB_PASSWORD}@"
-    f"{settings.DB_HOST}:"
-    f"{settings.DB_PORT}/"
-    f"{settings.DB_NAME}"
-)
+DATABASE_URL = settings.database_url
 
 engine = create_engine(
     DATABASE_URL,

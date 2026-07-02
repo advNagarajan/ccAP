@@ -4,12 +4,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Settings(BaseSettings):
-    # Metadata DB
     DB_HOST: str
     DB_PORT: int
     DB_NAME: str
     DB_USER: str
     DB_PASSWORD: str
+    CLOUD_SQL_CONNECTION_NAME: str | None = None
 
     # GCP Core
     GCP_PROJECT_ID: str
@@ -92,6 +92,12 @@ class Settings(BaseSettings):
 
     # Agentic Pipeline
     ENABLE_AGENTIC_PIPELINE: bool = False
+
+    @property
+    def database_url(self) -> str:
+        if self.CLOUD_SQL_CONNECTION_NAME:
+            return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@/{self.DB_NAME}?host=/cloudsql/{self.CLOUD_SQL_CONNECTION_NAME}"
+        return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     model_config = SettingsConfigDict(
         extra="ignore"

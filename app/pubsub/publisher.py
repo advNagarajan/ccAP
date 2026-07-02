@@ -1,3 +1,4 @@
+import functools
 import json
 
 from google.cloud import pubsub_v1
@@ -5,16 +6,19 @@ from google.cloud import pubsub_v1
 from app.core.settings import settings
 
 
-publisher = pubsub_v1.PublisherClient()
+@functools.lru_cache(maxsize=1)
+def get_publisher() -> pubsub_v1.PublisherClient:
+    return pubsub_v1.PublisherClient()
 
 
 def publish_event(topic_name: str, payload: dict):
-    topic_path = publisher.topic_path(
+    pub = get_publisher()
+    topic_path = pub.topic_path(
         settings.GCP_PROJECT_ID,
         topic_name
     )
 
-    future = publisher.publish(
+    future = pub.publish(
         topic_path,
         json.dumps(payload).encode("utf-8")
     )

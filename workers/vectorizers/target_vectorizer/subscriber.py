@@ -116,6 +116,8 @@ def callback_feedback(message):
 
 
 def start_subscriber():
+    from workers.common.dummy_server import start_dummy_server
+    start_dummy_server()
     while True:
         subscriber = None
         mutation_future = None

@@ -37,8 +37,6 @@ def process_ingestion_requested(message_data: bytes):
 
     db = SessionLocal()
 
-    try:
-
     logger = logging.getLogger("ingestion_processor")
 
     try:

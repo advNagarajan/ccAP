@@ -227,4 +227,6 @@ jobs:
           VITE_API_URL="$API_URL" npm run build --prefix frontend
           
           # Synchronize build assets to static GCS bucket
-          gcloud storage rsync -r frontend/dist gs://${{ vars.FRONTEND_BUCKET }} --delete-unmatched
+          gcloud storage rsync frontend/dist gs://${{ vars.FRONTEND_BUCKET }} \
+            --recursive \
+            --delete-unmatched-destination-objects

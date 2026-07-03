@@ -51,12 +51,6 @@ class Settings(BaseSettings):
     PUBSUB_SUBSCRIPTION_QUALITY_CHECK_REQUESTED: str = "quality-check-requested-sub"
     PUBSUB_SUBSCRIPTION_QUALITY_CHECK_COMPLETED: str = "quality-check-completed-sub"
 
-    # Notification Subscriptions
-    # (Leaving these default to None / fallback if not overridden)
-    # But ensuring dead letter defaults to the expected subscriber name
-    # instead of being required.
-    # We will let these be string fields with their defaults.
-
     # Notification Channels (Slack & SMTP)
     SLACK_WEBHOOK_URL: str | None = None
     SLACK_WEBHOOK_NEW_TABLE: str | None = None

@@ -11,6 +11,8 @@ import {
   Loader2,
   Calendar,
   RefreshCw,
+  RotateCcw,
+  Trash2,
 } from 'lucide-react';
 
 interface Source {
@@ -57,6 +59,15 @@ export const Sources: React.FC = () => {
   const [isSwapOpen, setIsSwapOpen] = useState(false);
   const [swappingSource, setSwappingSource] = useState<Source | null>(null);
   const [nextConfigId, setNextConfigId] = useState('');
+
+  // Edit Modal State
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingSource, setEditingSource] = useState<Source | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editType, setEditType] = useState('GCS');
+  const [editConfigId, setEditConfigId] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editConnDetails, setEditConnDetails] = useState('');
 
   // Pre-ingest Configuration Review Modal State
   const [isReviewOpen, setIsReviewOpen] = useState(false);
@@ -159,6 +170,61 @@ export const Sources: React.FC = () => {
     }
   };
 
+  const handleEditSource = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSource) return;
+
+    if (!editName || !editConfigId) {
+      showNotification('Please fill in all required fields', 'error');
+      return;
+    }
+
+    let parsedConn = {};
+    try {
+      parsedConn = JSON.parse(editConnDetails);
+    } catch (err) {
+      showNotification('Connection details must be valid JSON', 'error');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await api.patch(`/sources/${editingSource.source_id}`, {
+        name: editName,
+        source_type: editType,
+        config_id: editConfigId,
+        description: editDesc || null,
+        connection_details: parsedConn,
+      });
+
+      showNotification('Source updated successfully!');
+      setIsEditOpen(false);
+      fetchData();
+    } catch (err: any) {
+      showNotification(err.message || 'Failed to update source', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteSource = async (sourceId: string) => {
+    if (!window.confirm('Are you sure you want to delete this data source?')) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await api.delete(`/sources/${sourceId}`);
+      showNotification('Source deleted successfully!');
+      setIsEditOpen(false);
+      fetchData();
+    } catch (err: any) {
+      showNotification(err.message || 'Failed to delete source', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getLastIngestTime = (sourceId: string) => {
     const sourceJobs = jobs.filter((j) => j.source_id === sourceId);
     if (sourceJobs.length === 0) return 'Never';
@@ -184,7 +250,16 @@ export const Sources: React.FC = () => {
             Manage database connections, ingestion YAML templates, and trigger jobs.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button
+            onClick={() => fetchData()}
+            disabled={loading}
+            className="btn btn-secondary"
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', height: '36px' }}
+          >
+            <RotateCcw size={14} className={loading ? "animate-spin" : ""} />
+            <span>Refresh</span>
+          </button>
           <button
             onClick={() => {
               if (configs.length === 0) {
@@ -195,7 +270,7 @@ export const Sources: React.FC = () => {
               }
             }}
             className="btn"
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', height: '36px' }}
           >
             <Plus size={16} />
             <span>Register Source</span>
@@ -428,37 +503,65 @@ export const Sources: React.FC = () => {
                 </div>
               </div>
 
-              {/* Action Button */}
-              <button
-                onClick={() => {
-                  setReviewSource(source);
-                  setIsReviewOpen(true);
-                }}
-                disabled={ingestingId === source.source_id}
-                className="btn"
-                style={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  backgroundColor: ingestingId === source.source_id ? '#27272a' : '#0ea5e9',
-                  borderColor: ingestingId === source.source_id ? '#27272a' : '#0ea5e9',
-                  height: '38px',
-                }}
-              >
-                {ingestingId === source.source_id ? (
-                  <>
-                    <Loader2 className="animate-spin" size={16} />
-                    <span>Triggering...</span>
-                  </>
-                ) : (
-                  <>
-                    <Play size={16} fill="currentColor" />
-                    <span>Ingest Now</span>
-                  </>
-                )}
-              </button>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  onClick={() => {
+                    setEditingSource(source);
+                    setEditName(source.name);
+                    setEditType(source.source_type);
+                    setEditConfigId(source.config_id);
+                    setEditDesc(source.description || '');
+                    setEditConnDetails(JSON.stringify(source.connection_details, null, 2));
+                    setIsEditOpen(true);
+                  }}
+                  className="btn btn-secondary"
+                  style={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    backgroundColor: 'transparent',
+                    border: '1px solid #27272a',
+                    color: '#fafafa',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    height: '38px',
+                  }}
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => {
+                    setReviewSource(source);
+                    setIsReviewOpen(true);
+                  }}
+                  disabled={ingestingId === source.source_id}
+                  className="btn"
+                  style={{
+                    flex: 2,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    backgroundColor: ingestingId === source.source_id ? '#27272a' : '#0ea5e9',
+                    borderColor: ingestingId === source.source_id ? '#27272a' : '#0ea5e9',
+                    height: '38px',
+                  }}
+                >
+                  {ingestingId === source.source_id ? (
+                    <>
+                      <Loader2 className="animate-spin" size={16} />
+                      <span>Triggering...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play size={16} fill="currentColor" />
+                      <span>Ingest Now</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -963,6 +1066,207 @@ export const Sources: React.FC = () => {
                 Proceed Ingestion
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Modal Form: Edit Source */}
+      {isEditOpen && editingSource && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.8)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '520px',
+              backgroundColor: '#18181b',
+              border: '1px solid #27272a',
+              borderRadius: '8px',
+              padding: '28px',
+              position: 'relative',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+            }}
+          >
+            <button
+              onClick={() => setIsEditOpen(false)}
+              style={{
+                position: 'absolute',
+                top: '20px',
+                right: '20px',
+                background: 'none',
+                border: 'none',
+                color: '#a1a1aa',
+                cursor: 'pointer',
+              }}
+            >
+              <X size={18} />
+            </button>
+            <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#fafafa', marginBottom: '8px' }}>
+              Edit Data Source
+            </h3>
+            <p style={{ color: '#a1a1aa', fontSize: '13px', marginBottom: '20px' }}>
+              Modify the source's name, type, templates, or connection details.
+            </p>
+
+            <form onSubmit={handleEditSource} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 500, color: '#fafafa' }}>
+                  Source Name <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  style={{
+                    backgroundColor: '#09090b',
+                    border: '1px solid #27272a',
+                    borderRadius: '6px',
+                    padding: '8px 12px',
+                    color: '#fafafa',
+                    fontSize: '14px',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 500, color: '#fafafa' }}>
+                    Source Type <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <select
+                    value={editType}
+                    onChange={(e) => setEditType(e.target.value)}
+                    style={{
+                      backgroundColor: '#09090b',
+                      border: '1px solid #27272a',
+                      borderRadius: '6px',
+                      padding: '8px 12px',
+                      color: '#fafafa',
+                      fontSize: '14px',
+                    }}
+                  >
+                    <option value="GCS">Google Cloud Storage</option>
+                    <option value="BIGQUERY">BigQuery</option>
+                    <option value="FIRESTORE">Firestore</option>
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 500, color: '#fafafa' }}>
+                    Configuration Template <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <select
+                    value={editConfigId}
+                    onChange={(e) => setEditConfigId(e.target.value)}
+                    style={{
+                      backgroundColor: '#09090b',
+                      border: '1px solid #27272a',
+                      borderRadius: '6px',
+                      padding: '8px 12px',
+                      color: '#fafafa',
+                      fontSize: '14px',
+                    }}
+                  >
+                    {configs.map((c) => (
+                      <option key={c.config_id} value={c.config_id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 500, color: '#fafafa' }}>Description</label>
+                <textarea
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  rows={2}
+                  style={{
+                    backgroundColor: '#09090b',
+                    border: '1px solid #27272a',
+                    borderRadius: '6px',
+                    padding: '8px 12px',
+                    color: '#fafafa',
+                    fontSize: '14px',
+                    resize: 'vertical',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 500, color: '#fafafa' }}>
+                  Connection Details (JSON) <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <textarea
+                  required
+                  value={editConnDetails}
+                  onChange={(e) => setEditConnDetails(e.target.value)}
+                  rows={4}
+                  style={{
+                    backgroundColor: '#09090b',
+                    border: '1px solid #27272a',
+                    borderRadius: '6px',
+                    padding: '8px 12px',
+                    color: '#0ea5e9',
+                    fontFamily: 'monospace',
+                    fontSize: '13px',
+                    resize: 'vertical',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px', gap: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteSource(editingSource.source_id)}
+                  style={{
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    color: '#ef4444',
+                    borderRadius: '6px',
+                    padding: '8px 16px',
+                    fontSize: '14px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <Trash2 size={16} />
+                  <span>Delete Source</span>
+                </button>
+
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditOpen(false)}
+                    className="btn btn-secondary"
+                    style={{ padding: '8px 16px' }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn"
+                    style={{ padding: '8px 16px', backgroundColor: '#0ea5e9', color: '#fff', border: 'none' }}
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
       )}

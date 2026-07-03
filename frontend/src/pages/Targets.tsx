@@ -10,6 +10,7 @@ import {
   Calendar,
   Grid,
   RotateCcw,
+  Trash2,
 } from 'lucide-react';
 
 interface Target {
@@ -33,6 +34,16 @@ export const Targets: React.FC = () => {
 
   // Modal State
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
+
+  // Edit Modal State
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingTarget, setEditingTarget] = useState<Target | null>(null);
+  const [editTargetName, setEditTargetName] = useState('');
+  const [editTargetType, setEditTargetType] = useState('POSTGRESQL');
+  const [editBusinessDomain, setEditBusinessDomain] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editConnectionDetails, setEditConnectionDetails] = useState('');
+  const [editSchemaDefinition, setEditSchemaDefinition] = useState('');
 
   // Register Form State
   const [targetName, setTargetName] = useState('');
@@ -66,6 +77,72 @@ export const Targets: React.FC = () => {
   useEffect(() => {
     fetchTargets();
   }, []);
+
+  const handleEditTarget = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTarget) return;
+
+    if (!editTargetName) {
+      showNotification('Please provide a target name', 'error');
+      return;
+    }
+
+    let parsedConn = {};
+    let parsedSchema = {};
+    try {
+      parsedConn = JSON.parse(editConnectionDetails);
+    } catch (err) {
+      showNotification('Connection details must be valid JSON', 'error');
+      return;
+    }
+
+    if (editSchemaDefinition) {
+      try {
+        parsedSchema = JSON.parse(editSchemaDefinition);
+      } catch (err) {
+        showNotification('Schema definition must be valid JSON', 'error');
+        return;
+      }
+    }
+
+    try {
+      setLoading(true);
+      await api.patch(`/targets/${editingTarget.target_id}`, {
+        target_name: editTargetName,
+        target_type: editTargetType,
+        business_domain: editBusinessDomain || null,
+        description: editDesc || null,
+        connection_details: parsedConn,
+        schema_definition: editSchemaDefinition ? parsedSchema : null,
+      });
+
+      showNotification('Target catalog updated successfully!');
+      setIsEditOpen(false);
+      fetchTargets();
+    } catch (err: any) {
+      showNotification(err.message || 'Failed to update target catalog', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteTarget = async (targetId: string) => {
+    if (!window.confirm('Are you sure you want to delete this target catalog?')) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await api.delete(`/targets/${targetId}`);
+      showNotification('Target catalog deleted successfully!');
+      setIsEditOpen(false);
+      fetchTargets();
+    } catch (err: any) {
+      showNotification(err.message || 'Failed to delete target catalog', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleRegisterTarget = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -371,6 +448,36 @@ export const Targets: React.FC = () => {
                   </div>
                 </div>
               </div>
+              {/* Edit Target Button */}
+              <button
+                onClick={() => {
+                  setEditingTarget(target);
+                  setEditTargetName(target.target_name);
+                  setEditTargetType(target.target_type);
+                  setEditBusinessDomain(target.business_domain || '');
+                  setEditDesc(target.description || '');
+                  setEditConnectionDetails(JSON.stringify(target.connection_details, null, 2));
+                  setEditSchemaDefinition(target.schema_definition ? JSON.stringify(target.schema_definition, null, 2) : '');
+                  setIsEditOpen(true);
+                }}
+                className="btn btn-secondary"
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  backgroundColor: 'transparent',
+                  border: '1px solid #27272a',
+                  color: '#fafafa',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  height: '38px',
+                  marginTop: 'auto',
+                }}
+              >
+                Edit Target
+              </button>
             </div>
           ))}
         </div>
@@ -543,6 +650,226 @@ export const Targets: React.FC = () => {
               <button type="submit" className="btn" style={{ width: '100%', marginTop: '8px', height: '40px' }}>
                 Register Target
               </button>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Modal Form: Edit Target */}
+      {isEditOpen && editingTarget && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.8)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '520px',
+              backgroundColor: '#18181b',
+              border: '1px solid #27272a',
+              borderRadius: '8px',
+              padding: '28px',
+              position: 'relative',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+            }}
+          >
+            <button
+              onClick={() => setIsEditOpen(false)}
+              style={{
+                position: 'absolute',
+                top: '20px',
+                right: '20px',
+                background: 'none',
+                border: 'none',
+                color: '#a1a1aa',
+                cursor: 'pointer',
+              }}
+            >
+              <X size={18} />
+            </button>
+            <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#fafafa', marginBottom: '8px' }}>
+              Edit Target Catalog
+            </h3>
+            <p style={{ color: '#a1a1aa', fontSize: '13px', marginBottom: '20px' }}>
+              Modify the target's parameters, domain, or schema definition.
+            </p>
+
+            <form onSubmit={handleEditTarget} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 500, color: '#fafafa' }}>
+                  Target Name <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editTargetName}
+                  onChange={(e) => setEditTargetName(e.target.value)}
+                  style={{
+                    backgroundColor: '#09090b',
+                    border: '1px solid #27272a',
+                    borderRadius: '6px',
+                    padding: '8px 12px',
+                    color: '#fafafa',
+                    fontSize: '14px',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 500, color: '#fafafa' }}>
+                    Target Type <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <select
+                    value={editTargetType}
+                    onChange={(e) => setEditTargetType(e.target.value)}
+                    style={{
+                      backgroundColor: '#09090b',
+                      border: '1px solid #27272a',
+                      borderRadius: '6px',
+                      padding: '8px 12px',
+                      color: '#fafafa',
+                      fontSize: '14px',
+                    }}
+                  >
+                    <option value="POSTGRESQL">PostgreSQL</option>
+                    <option value="MYSQL">MySQL</option>
+                    <option value="BIGQUERY">BigQuery</option>
+                    <option value="GCS">Google Cloud Storage</option>
+                    <option value="S3">Amazon S3</option>
+                    <option value="DELTA">Delta Lake</option>
+                    <option value="SNOWFLAKE">Snowflake</option>
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 500, color: '#fafafa' }}>Business Domain</label>
+                  <input
+                    type="text"
+                    value={editBusinessDomain}
+                    onChange={(e) => setEditBusinessDomain(e.target.value)}
+                    placeholder="e.g. Finance, Marketing"
+                    style={{
+                      backgroundColor: '#09090b',
+                      border: '1px solid #27272a',
+                      borderRadius: '6px',
+                      padding: '8px 12px',
+                      color: '#fafafa',
+                      fontSize: '14px',
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 500, color: '#fafafa' }}>Description</label>
+                <textarea
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  rows={2}
+                  style={{
+                    backgroundColor: '#09090b',
+                    border: '1px solid #27272a',
+                    borderRadius: '6px',
+                    padding: '8px 12px',
+                    color: '#fafafa',
+                    fontSize: '14px',
+                    resize: 'vertical',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 500, color: '#fafafa' }}>
+                  Connection Parameters (JSON) <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <textarea
+                  required
+                  value={editConnectionDetails}
+                  onChange={(e) => setEditConnectionDetails(e.target.value)}
+                  rows={4}
+                  style={{
+                    backgroundColor: '#09090b',
+                    border: '1px solid #27272a',
+                    borderRadius: '6px',
+                    padding: '8px 12px',
+                    color: '#f59e0b',
+                    fontFamily: 'monospace',
+                    fontSize: '13px',
+                    resize: 'vertical',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 500, color: '#fafafa' }}>
+                  Schema Definition JSON (Optional)
+                </label>
+                <textarea
+                  value={editSchemaDefinition}
+                  onChange={(e) => setEditSchemaDefinition(e.target.value)}
+                  rows={4}
+                  style={{
+                    backgroundColor: '#09090b',
+                    border: '1px solid #27272a',
+                    borderRadius: '6px',
+                    padding: '8px 12px',
+                    color: '#a1a1aa',
+                    fontFamily: 'monospace',
+                    fontSize: '13px',
+                    resize: 'vertical',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px', gap: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteTarget(editingTarget.target_id)}
+                  style={{
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    color: '#ef4444',
+                    borderRadius: '6px',
+                    padding: '8px 16px',
+                    fontSize: '14px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <Trash2 size={16} />
+                  <span>Delete Target</span>
+                </button>
+
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditOpen(false)}
+                    className="btn btn-secondary"
+                    style={{ padding: '8px 16px' }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn"
+                    style={{ padding: '8px 16px', backgroundColor: '#0ea5e9', color: '#fff', border: 'none' }}
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </div>
             </form>
           </div>
         </div>

@@ -110,6 +110,12 @@ jobs:
         with:
           version: '>= 470.0.0'
 
+      - name: Capture Active Revision
+        run: |
+          PREV_REV=$(gcloud run services describe backend-api --region ${{ vars.REGION }} --format="value(status.traffic[0].revisionName)" 2>/dev/null || echo "")
+          echo "PREV_REV=$PREV_REV" >> $GITHUB_ENV
+          echo "Captured previous revision: $PREV_REV"
+
       - name: Deploy backend-api to Cloud Run
         run: |
           gcloud run deploy backend-api \
@@ -122,6 +128,30 @@ jobs:
             --add-cloudsql-instances ${{ vars.CLOUD_SQL_CONNECTION_NAME }} \
             --set-env-vars "GCP_PROJECT_ID=${{ vars.PROJECT_ID }},DB_NAME=${{ vars.DB_NAME }},DB_PORT=${{ vars.DB_PORT }},CLOUD_SQL_CONNECTION_NAME=${{ vars.CLOUD_SQL_CONNECTION_NAME }},SMTP_HOST=${{ vars.SMTP_HOST }},SMTP_PORT=${{ vars.SMTP_PORT }},NOTIFICATION_EMAIL_SENDER=${{ vars.NOTIFICATION_EMAIL_SENDER }},DB_HOST=127.0.0.1" \
             --set-secrets "DB_USER=DB_USER:latest,DB_PASSWORD=DB_PASSWORD:latest,SMTP_USER=SMTP_USER:latest,SMTP_PASSWORD=SMTP_PASSWORD:latest,SLACK_WEBHOOK_URL=SLACK_WEBHOOK_URL:latest,SLACK_WEBHOOK_DEAD_LETTER=SLACK_WEBHOOK_DEAD_LETTER:latest,SLACK_WEBHOOK_NEW_TABLE=SLACK_WEBHOOK_NEW_TABLE:latest,SLACK_WEBHOOK_JOB_COMPLETED=SLACK_WEBHOOK_JOB_COMPLETED:latest,SLACK_WEBHOOK_JOB_FAILED=SLACK_WEBHOOK_JOB_FAILED:latest,SLACK_WEBHOOK_QUALITY_CHECK=SLACK_WEBHOOK_QUALITY_CHECK:latest"
+
+      - name: Smoke Test Backend API
+        run: |
+          API_URL=$(gcloud run services describe backend-api --region ${{ vars.REGION }} --format="value(status.url)")
+          echo "Testing live URL: $API_URL"
+          for i in {1..3}; do
+            STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$API_URL/")
+            echo "Attempt $i: HTTP Status $STATUS_CODE"
+            if [ "$STATUS_CODE" -eq 200 ]; then
+              echo "Smoke test passed!"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Smoke test failed!"
+          exit 1
+
+      - name: Rollback Backend API on Failure
+        if: failure() && env.PREV_REV != ''
+        run: |
+          echo "Rolling back backend-api to revision: $PREV_REV"
+          gcloud run services update-traffic backend-api \
+            --region ${{ vars.REGION }} \
+            --to-revisions=$PREV_REV=100
 
   # =========================================================================
   # 4. DEPLOY WORKERS
@@ -167,6 +197,12 @@ jobs:
         with:
           version: '>= 470.0.0'
 
+      - name: Capture Active Revision
+        run: |
+          PREV_REV=$(gcloud run services describe ${{ matrix.worker.name }} --region ${{ vars.REGION }} --format="value(status.traffic[0].revisionName)" 2>/dev/null || echo "")
+          echo "PREV_REV=$PREV_REV" >> $GITHUB_ENV
+          echo "Captured previous revision: $PREV_REV"
+
       - name: Deploy Worker to Cloud Run
         run: |
           gcloud run deploy ${{ matrix.worker.name }} \
@@ -182,6 +218,31 @@ jobs:
             --add-cloudsql-instances ${{ vars.CLOUD_SQL_CONNECTION_NAME }} \
             --set-env-vars "GCP_PROJECT_ID=${{ vars.PROJECT_ID }},DB_NAME=${{ vars.DB_NAME }},DB_PORT=${{ vars.DB_PORT }},CLOUD_SQL_CONNECTION_NAME=${{ vars.CLOUD_SQL_CONNECTION_NAME }},SMTP_HOST=${{ vars.SMTP_HOST }},SMTP_PORT=${{ vars.SMTP_PORT }},NOTIFICATION_EMAIL_SENDER=${{ vars.NOTIFICATION_EMAIL_SENDER }},DB_HOST=127.0.0.1" \
             --set-secrets "DB_USER=DB_USER:latest,DB_PASSWORD=DB_PASSWORD:latest,SMTP_USER=SMTP_USER:latest,SMTP_PASSWORD=SMTP_PASSWORD:latest,SLACK_WEBHOOK_URL=SLACK_WEBHOOK_URL:latest,SLACK_WEBHOOK_DEAD_LETTER=SLACK_WEBHOOK_DEAD_LETTER:latest,SLACK_WEBHOOK_NEW_TABLE=SLACK_WEBHOOK_NEW_TABLE:latest,SLACK_WEBHOOK_JOB_COMPLETED=SLACK_WEBHOOK_JOB_COMPLETED:latest,SLACK_WEBHOOK_JOB_FAILED=SLACK_WEBHOOK_JOB_FAILED:latest,SLACK_WEBHOOK_QUALITY_CHECK=SLACK_WEBHOOK_QUALITY_CHECK:latest"
+
+      - name: Smoke Test Worker
+        run: |
+          URL=$(gcloud run services describe ${{ matrix.worker.name }} --region ${{ vars.REGION }} --format="value(status.url)")
+          echo "Testing live URL: $URL"
+          TOKEN=$(gcloud auth print-identity-token)
+          for i in {1..3}; do
+            STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" "$URL/")
+            echo "Attempt $i: HTTP Status $STATUS_CODE"
+            if [ "$STATUS_CODE" -eq 200 ]; then
+              echo "Smoke test passed!"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Smoke test failed!"
+          exit 1
+
+      - name: Rollback Worker on Failure
+        if: failure() && env.PREV_REV != ''
+        run: |
+          echo "Rolling back ${{ matrix.worker.name }} to revision: $PREV_REV"
+          gcloud run services update-traffic ${{ matrix.worker.name }} \
+            --region ${{ vars.REGION }} \
+            --to-revisions=$PREV_REV=100
 
   # =========================================================================
   # 5. DEPLOY FRONTEND WEBSITE

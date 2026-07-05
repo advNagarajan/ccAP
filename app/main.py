@@ -1,6 +1,10 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+from app.db.session import get_db
 from app.api.configuration_routes import router as configuration_router
+
 from app.api.source_routes import router as source_router
 from app.api.ingestion_routes import router as ingestion_router
 from app.api.job_routes import router as job_router
@@ -26,10 +30,18 @@ app.add_middleware(
 )
 
 @app.get("/")
-def health():
-    return {
-        "status" : "running"
-    }
+def health(db: Session = Depends(get_db)):
+    try:
+        db.execute(text("SELECT 1"))
+        return {
+            "status" : "running",
+            "database" : "connected"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Database connection failed: {str(e)}"
+        )
 
 app.include_router(source_router)
 app.include_router(configuration_router)

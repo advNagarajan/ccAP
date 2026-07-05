@@ -96,6 +96,10 @@ class VertexGemini(Gemini):
 
 
 # Define the Recommendation Agent
+# NOTE: output_schema is intentionally NOT set here.
+# ADK enforces a hard constraint: when output_schema is set, the LLM cannot
+# also call tools — it enters an infinite tool-call loop. Instead we validate
+# the free-text JSON response with Pydantic after the run loop finishes.
 recommendation_agent = LlmAgent(
     name="RecommendationAgent",
     model=VertexGemini(model=settings.VERTEX_GENERATIVE_MODEL or "gemini-2.5-flash"),
@@ -185,6 +189,8 @@ CONSTRAINTS:
   File targets: describe schema evolution rules.
   NoSQL targets: describe document transformation operations.
 - If no action is needed, return empty recommendations with explanation.
+- When you have finished your analysis, respond with ONLY a valid JSON object
+  matching the RecommendationAgentOutput schema — no markdown fences, no extra keys.
 """,
     tools=[
         get_target_schema_details,
@@ -196,7 +202,7 @@ CONSTRAINTS:
         get_historical_recommendations,
         get_recommendation_feedback,
     ],
-    output_schema=RecommendationAgentOutput,
+    max_turns=12,
 )
 
 
@@ -267,28 +273,61 @@ async def run_recommendation_agent(
         parts=[types.Part(text=input_text)]
     )
 
-    # 4. Run the agent
+    # 4. Run the agent with a hard wall-clock timeout.
+    # asyncio.wait_for cancels the coroutine if the agent stalls, preventing
+    # indefinite hangs when Vertex AI does not return a final response.
+    agent_timeout = settings.RECOMMENDATION_AGENT_TIMEOUT_SECONDS
     final_response = None
-    async for event in runner.run_async(
-        session_id=session.id,
-        user_id="system",
-        new_message=content,
-    ):
-        if event.is_final_response():
-            if event.content and event.content.parts:
-                final_response = "".join(
-                    part.text for part in event.content.parts
-                    if part.text and not part.thought
-                )
-                logger.info("ADK Recommendation Agent completed with final response.")
 
-    # 5. Parse response
+    async def _run_agent() -> None:
+        nonlocal final_response
+        async for event in runner.run_async(
+            session_id=session.id,
+            user_id="system",
+            new_message=content,
+        ):
+            if event.is_final_response():
+                if event.content and event.content.parts:
+                    final_response = "".join(
+                        part.text for part in event.content.parts
+                        if part.text and not part.thought
+                    )
+                    logger.info("ADK Recommendation Agent completed with final response.")
+
+    try:
+        await asyncio.wait_for(_run_agent(), timeout=agent_timeout)
+    except asyncio.TimeoutError:
+        logger.error(
+            f"ADK Recommendation Agent timed out after {agent_timeout}s for job_id={job_id}. "
+            "Returning fallback response."
+        )
+        return {
+            "recommendations": [],
+            "explanation": f"Agent timed out after {agent_timeout} seconds.",
+            "impact_assessment": {},
+            "transformation_plan": None,
+            "data_quality_flags": None,
+            "risk_level": "LOW",
+            "estimated_effort": None,
+        }
+
+    # 5. Validate and parse structured output via Pydantic, then return as dict.
+    # We validate with the schema here rather than in the LlmAgent constructor
+    # because ADK does not support output_schema when tools are also present.
     if final_response:
         try:
-            return json.loads(final_response)
-        except Exception as e:
-            logger.error(f"Failed to parse recommendation agent JSON output: {e}. Output was: {final_response}")
-            raise e
+            parsed = RecommendationAgentOutput.model_validate_json(final_response)
+            return parsed.model_dump()
+        except Exception:
+            # Fall back to raw JSON parse if Pydantic validation fails
+            try:
+                return json.loads(final_response)
+            except Exception as e:
+                logger.error(
+                    f"Failed to parse Recommendation Agent JSON output: {e}. "
+                    f"Output was: {final_response}"
+                )
+                raise
     else:
         logger.warning("ADK Recommendation Agent did not emit a final response.")
         return {

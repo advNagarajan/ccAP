@@ -86,6 +86,8 @@ class Settings(BaseSettings):
 
     # Agentic Pipeline
     ENABLE_AGENTIC_PIPELINE: bool = False
+    INFERENCE_AGENT_TIMEOUT_SECONDS: int = 120   # Max wall-clock seconds for the inference agent run
+    RECOMMENDATION_AGENT_TIMEOUT_SECONDS: int = 180  # Max wall-clock seconds for the recommendation agent run
 
     @property
     def database_url(self) -> str:

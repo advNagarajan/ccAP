@@ -277,6 +277,7 @@ export const Jobs: React.FC<JobsProps> = ({ setActiveTab }) => {
       case 'COMPLETED':
         return <CheckCircle2 size={16} color="#10b981" />;
       case 'FAILED':
+      case 'FALLBACK_DENIED':
         return <XCircle size={16} color="#ef4444" />;
       case 'CANCELLED':
         return <AlertOctagon size={16} color="#71717a" />;
@@ -301,6 +302,7 @@ export const Jobs: React.FC<JobsProps> = ({ setActiveTab }) => {
         color = '#10b981';
         break;
       case 'FAILED':
+      case 'FALLBACK_DENIED':
         bg = 'rgba(239, 68, 68, 0.1)';
         color = '#ef4444';
         break;

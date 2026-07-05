@@ -622,7 +622,7 @@ def get_job_details(
     # 5. Determine schemas
     metadata_profile = db.execute(
         select(MetadataProfile).where(MetadataProfile.job_id == job_id)
-    ).scalar_one_or_none()
+    ).scalars().first()
 
     first_target_schema = None
     if artifact_details:

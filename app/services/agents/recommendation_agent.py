@@ -244,7 +244,10 @@ async def run_recommendation_agent(
     ):
         if event.is_final_response():
             if event.content and event.content.parts:
-                final_response = event.content.parts[0].text
+                final_response = "".join(
+                    part.text for part in event.content.parts
+                    if part.text and not part.thought
+                )
                 logger.info("ADK Recommendation Agent completed with final response.")
 
     # 5. Parse response

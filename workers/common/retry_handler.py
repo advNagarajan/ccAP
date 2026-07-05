@@ -105,8 +105,22 @@ def is_transient_error(e: Exception) -> bool:
 
     # 8. Check error messages for common cloud/infra keywords as a fallback
     err_str = str(e).lower()
-    if any(keyword in err_str for keyword in ["resource_exhausted", "rate limit", "quota", "503", "504", "timeout", "connection refused", "connection pool", "hallucination", "googleauth", "refresherror", "refresh token", "credentials"]):
+    if any(keyword in err_str for keyword in ["resource_exhausted", "rate limit", "quota", "503", "504", "timeout", "timed out", "connection refused", "connection pool", "hallucination", "googleauth", "refresherror", "refresh token", "credentials"]):
         return True
+
+    # 9. ADK agent failures: RuntimeErrors raised when the ADK node runner swallows
+    # a network/infra exception internally and the agent terminates without a final response.
+    if isinstance(e, RuntimeError):
+        adk_transient_phrases = [
+            "adk inference agent",
+            "adk recommendation agent",
+            "emitted no events",
+            "terminated after",
+            "without producing a final response",
+            "network or infrastructure failure",
+        ]
+        if any(phrase in err_str for phrase in adk_transient_phrases):
+            return True
 
     return False
 

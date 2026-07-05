@@ -1,9 +1,12 @@
 import json
+import asyncio
 import logging
+
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
-from google.genai import types
+from google.adk.models.google_llm import Gemini
+from google.genai import types, Client
 
 from app.core.settings import settings
 from app.services.agents.schemas import RecommendationAgentOutput
@@ -18,54 +21,10 @@ from app.services.agents.tools import (
     get_recommendation_feedback,
 )
 
-from functools import cached_property
-from google.adk.models.google_llm import Gemini
-from google.genai import Client
-
 logger = logging.getLogger("schema_recommendation.agent")
 
-
-import asyncio
-
-class VertexGemini(Gemini):
-    """
-    Gemini subclass that routes all calls through Vertex AI.
-
-    Uses the canonical ADK 2.3.0 override pattern: a single @cached_property
-    returning a Client configured for Vertex AI. The per-loop dict workaround
-    from earlier versions is not needed in ADK 2.3.0.
-    """
-
-    @cached_property
-    def api_client(self) -> Client:
-        base_url, api_version = self._base_url_and_api_version
-        http_options_kwargs: dict = {
-            'headers': self._tracking_headers(),
-            'retry_options': self.retry_options,
-            'base_url': base_url,
-            'timeout': 60,
-        }
-        if api_version:
-            http_options_kwargs['api_version'] = api_version
-
-        return Client(
-            vertexai=True,
-            project=settings.GCP_PROJECT_ID,
-            location=settings.GCP_LOCATION,
-            http_options=types.HttpOptions(**http_options_kwargs),
-        )
-
-
-# Define the Recommendation Agent
-# NOTE: output_schema is intentionally NOT set here.
-# ADK enforces a hard constraint: when output_schema is set, the LLM cannot
-# also call tools — it enters an infinite tool-call loop. Instead we validate
-# the free-text JSON response with Pydantic after the run loop finishes.
-recommendation_agent = LlmAgent(
-    name="RecommendationAgent",
-    model=VertexGemini(model=settings.VERTEX_GENERATIVE_MODEL or "gemini-2.5-flash"),
-    description="Analyzes validation and drift findings to propose database/ingestion schema recommendations.",
-    instruction="""You are an expert database administrator and data engineer on a schema intelligence platform.
+# Agent instruction — kept at module level (pure data, no event-loop resources).
+_RECOMMENDATION_INSTRUCTION = """You are an expert database administrator and data engineer on a schema intelligence platform.
 
 Your task: Given validation and drift findings for a source-to-target schema mapping,
 produce the most comprehensive remediation plan possible.
@@ -152,18 +111,7 @@ CONSTRAINTS:
 - If no action is needed, return empty recommendations with explanation.
 - When you have finished your analysis, respond with ONLY a valid JSON object
   matching the RecommendationAgentOutput schema — no markdown fences, no extra keys.
-""",
-    tools=[
-        get_target_schema_details,
-        check_type_compatibility,
-        get_validation_report,
-        get_drift_report,
-        get_source_metadata,
-        get_data_quality_report,
-        get_historical_recommendations,
-        get_recommendation_feedback,
-    ],
-)
+"""
 
 
 class SessionProxy:
@@ -184,6 +132,15 @@ class SessionProxy:
         return self
 
 
+def _extract_json_block(text: str) -> str:
+    """Extracts the first JSON object block bounded by '{' and '}' from the text."""
+    start = text.find('{')
+    end = text.rfind('}')
+    if start != -1 and end != -1 and end > start:
+        return text[start:end+1]
+    return text
+
+
 async def run_recommendation_agent(
     job_id: str,
     target_id: str,
@@ -194,11 +151,58 @@ async def run_recommendation_agent(
 ) -> dict:
     """
     Initializes and executes the Recommendation Agent via ADK Runner.
-    Returns a dict matching the RecommendationAgentOutput schema shape.
+
+    The genai.Client, _VertexGemini, LlmAgent, and Runner are all created
+    inside this function — NOT at module level. This is intentional:
+
+    The subscriber calls asyncio.run() per Pub/Sub message. Each asyncio.run()
+    creates a new event loop and tears it down when done. httpx.AsyncClient is
+    bound to the event loop that created it. Any Client created outside the
+    current asyncio.run() will have a closed httpx session on the second
+    message, producing "Cannot send a request, as the client has been closed."
+
+    Creating everything fresh per invocation ensures all resources belong to
+    the current event loop.
     """
     logger.info(f"Running ADK Recommendation Agent for job_id: {job_id}")
 
-    # 1. Create session service and pre-load state
+    # 1. Build the Vertex AI client scoped to THIS event loop invocation.
+    _client = Client(
+        vertexai=True,
+        project=settings.GCP_PROJECT_ID,
+        location=settings.GCP_LOCATION,
+        http_options=types.HttpOptions(timeout=60000),
+    )
+
+    class _VertexGemini(Gemini):
+        """Routes to Vertex AI using the client created for this event loop."""
+        @property
+        def api_client(self) -> Client:
+            return _client
+
+    # 2. Build the LlmAgent for this invocation.
+    # NOTE: output_schema is intentionally NOT set.
+    # ADK enforces a hard constraint: when output_schema is set, the LLM
+    # cannot also call tools — it enters an infinite tool-call loop. We
+    # validate the free-text JSON response with Pydantic after the run.
+    agent = LlmAgent(
+        name="RecommendationAgent",
+        model=_VertexGemini(model=settings.VERTEX_GENERATIVE_MODEL or "gemini-2.5-flash"),
+        description="Analyzes validation and drift findings to propose database/ingestion schema recommendations.",
+        instruction=_RECOMMENDATION_INSTRUCTION,
+        tools=[
+            get_target_schema_details,
+            check_type_compatibility,
+            get_validation_report,
+            get_drift_report,
+            get_source_metadata,
+            get_data_quality_report,
+            get_historical_recommendations,
+            get_recommendation_feedback,
+        ],
+    )
+
+    # 3. Create session service and pre-load state.
     session_service = InMemorySessionService()
     session = await session_service.create_session(
         app_name="schema_recommendation",
@@ -212,14 +216,14 @@ async def run_recommendation_agent(
         }
     )
 
-    # 2. Create the Runner
+    # 4. Create the Runner.
     runner = Runner(
         app_name="schema_recommendation",
-        agent=recommendation_agent,
+        agent=agent,
         session_service=session_service,
     )
 
-    # 3. Build the input message
+    # 5. Build the input message.
     input_text = (
         f"Analyze validation and drift findings to produce a remediation plan.\n\n"
         f"Context details:\n"
@@ -233,55 +237,45 @@ async def run_recommendation_agent(
         parts=[types.Part(text=input_text)]
     )
 
-    # 4. Run the agent with a hard wall-clock timeout.
-    # asyncio.wait_for cancels the coroutine if the agent stalls, preventing
-    # indefinite hangs when Vertex AI does not return a final response.
+    # 6. Run the agent with a hard wall-clock timeout.
     agent_timeout = settings.RECOMMENDATION_AGENT_TIMEOUT_SECONDS
     final_response = None
+    agent_event_count = 0
 
     async def _run_agent() -> None:
-        nonlocal final_response
+        nonlocal final_response, agent_event_count
         async for event in runner.run_async(
             session_id=session.id,
             user_id="system",
             new_message=content,
         ):
+            agent_event_count += 1
             if event.is_final_response():
                 if event.content and event.content.parts:
                     final_response = "".join(
                         part.text for part in event.content.parts
-                        if part.text and not part.thought
+                        if part.text and not (getattr(part, "thought", None) is True)
                     )
                     logger.info("ADK Recommendation Agent completed with final response.")
 
     try:
         await asyncio.wait_for(_run_agent(), timeout=agent_timeout)
     except asyncio.TimeoutError:
-        logger.error(
-            f"ADK Recommendation Agent timed out after {agent_timeout}s for job_id={job_id}. "
-            "Returning fallback response."
+        logger.error(f"ADK Recommendation Agent timed out after {agent_timeout}s for job_id={job_id}.")
+        raise RuntimeError(
+            f"ADK Recommendation Agent timed out after {agent_timeout}s — "
+            "the LLM did not return a final response within the allowed window."
         )
-        return {
-            "recommendations": [],
-            "explanation": f"Agent timed out after {agent_timeout} seconds.",
-            "impact_assessment": {},
-            "transformation_plan": None,
-            "data_quality_flags": None,
-            "risk_level": "LOW",
-            "estimated_effort": None,
-        }
 
-    # 5. Validate and parse structured output via Pydantic, then return as dict.
-    # We validate with the schema here rather than in the LlmAgent constructor
-    # because ADK does not support output_schema when tools are also present.
+    # 7. Validate and parse structured output via Pydantic, then return as dict.
     if final_response:
+        cleaned_response = _extract_json_block(final_response)
         try:
-            parsed = RecommendationAgentOutput.model_validate_json(final_response)
+            parsed = RecommendationAgentOutput.model_validate_json(cleaned_response)
             return parsed.model_dump()
         except Exception:
-            # Fall back to raw JSON parse if Pydantic validation fails
             try:
-                return json.loads(final_response)
+                return json.loads(cleaned_response)
             except Exception as e:
                 logger.error(
                     f"Failed to parse Recommendation Agent JSON output: {e}. "
@@ -289,13 +283,12 @@ async def run_recommendation_agent(
                 )
                 raise
     else:
-        logger.warning("ADK Recommendation Agent did not emit a final response.")
-        return {
-            "recommendations": [],
-            "explanation": "Agent did not produce a final response.",
-            "impact_assessment": {},
-            "transformation_plan": None,
-            "data_quality_flags": None,
-            "risk_level": "LOW",
-            "estimated_effort": None,
-        }
+        if agent_event_count == 0:
+            raise RuntimeError(
+                "ADK Recommendation Agent emitted no events — likely a network or "
+                "infrastructure failure connecting to the model endpoint."
+            )
+        raise RuntimeError(
+            f"ADK Recommendation Agent terminated after {agent_event_count} events "
+            "without producing a final response. Check ADK node runner logs above for the root cause."
+        )

@@ -605,7 +605,7 @@ const QualityJobRow: React.FC<QualityJobRowProps> = ({
                                       </span>
                                     </div>
                                     <span style={{ fontSize: '12px', color: '#a1a1aa' }}>
-                                      Target Columns: {Array.isArray(rule.columns) ? rule.columns.join(', ') : typeof rule.columns === 'object' ? Object.keys(rule.columns).join(', ') : rule.column || 'N/A'}
+                                      Target Columns: {Array.isArray(rule.columns) ? rule.columns.join(', ') : (rule.columns && typeof rule.columns === 'object') ? Object.keys(rule.columns).join(', ') : rule.columns || rule.column || 'N/A'}
                                     </span>
                                     {rule.failure_count !== undefined && rule.failure_count > 0 && (
                                       <span style={{ fontSize: '12px', color: '#ef4444', fontWeight: 500 }}>

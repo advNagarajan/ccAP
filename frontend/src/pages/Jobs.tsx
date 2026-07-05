@@ -388,7 +388,13 @@ export const Jobs: React.FC<JobsProps> = ({ setActiveTab }) => {
     };
 
     const getInferenceStatusColor = (art: ArtifactLineageDetails) => {
-      if (!art.inference) return '#71717a';
+      const stage = activeGraphDetails.stages?.find(s => s.stage_name.toLowerCase() === 'target inference');
+      if (stage && stage.status === 'FAILED') return '#ef4444';
+      if (!art.inference) {
+        if (stage && stage.status === 'COMPLETED') return '#10b981';
+        if (stage && stage.status === 'RUNNING') return '#0ea5e9';
+        return '#71717a';
+      }
       return art.inference.confidence_score >= 0.7 ? '#10b981' : '#f59e0b';
     };
 
@@ -429,6 +435,12 @@ export const Jobs: React.FC<JobsProps> = ({ setActiveTab }) => {
     };
 
     const getVectorizationStatusColor = (art: ArtifactLineageDetails) => {
+      const vectStage = activeGraphDetails.stages?.find(s => s.stage_name.toLowerCase() === 'metadata vectorization');
+      if (vectStage) {
+        if (vectStage.status === 'COMPLETED') return '#10b981';
+        if (vectStage.status === 'FAILED') return '#ef4444';
+        return '#0ea5e9';
+      }
       if (art.inference) return '#10b981';
       if (art.status?.toUpperCase() === 'FAILED' && art.artifact_metadata && !art.inference) return '#ef4444';
       if (art.artifact_metadata) return '#0ea5e9';
@@ -759,7 +771,8 @@ export const Jobs: React.FC<JobsProps> = ({ setActiveTab }) => {
                     const isDriftSelected = isSelectedArtifact && selectedGraphNode === 'drift';
                     const isFinalSelected = isSelectedArtifact && selectedGraphNode === 'final';
 
-                    const artifactTargetName = art.target?.target_name || art.inference?.matched_target_table || 'Unassigned Catalog';
+                    const targetInferFailed = activeGraphDetails.stages?.some(s => s.stage_name.toLowerCase() === 'target inference' && s.status === 'FAILED');
+                    const artifactTargetName = targetInferFailed ? 'Inference Failed' : (art.target?.target_name || art.inference?.matched_target_table || 'Unassigned Catalog');
 
                     const renderPipelineStages = () => {
                       return (
@@ -835,7 +848,7 @@ export const Jobs: React.FC<JobsProps> = ({ setActiveTab }) => {
                           )}
 
                           {/* Node 4: Target Selection */}
-                          {art.inference && (
+                          {(art.inference || activeGraphDetails.stages?.some(s => s.stage_name.toLowerCase() === 'target inference')) && (
                             <>
                               {/* Connector */}
                               <div style={{ height: '20px', width: '2px', backgroundColor: '#27272a' }} />
@@ -1173,7 +1186,7 @@ export const Jobs: React.FC<JobsProps> = ({ setActiveTab }) => {
                               </span>
                             </div>
                             <span style={{ fontSize: '11px', color: '#a1a1aa' }}>
-                              Columns: {Array.isArray(rule.columns) ? rule.columns.join(', ') : typeof rule.columns === 'object' ? Object.keys(rule.columns).join(', ') : rule.column || 'N/A'}
+                              Columns: {Array.isArray(rule.columns) ? rule.columns.join(', ') : (rule.columns && typeof rule.columns === 'object') ? Object.keys(rule.columns).join(', ') : rule.columns || rule.column || 'N/A'}
                             </span>
                             {rule.failure_count !== undefined && rule.failure_count > 0 && (
                               <span style={{ fontSize: '11px', color: '#ef4444', fontWeight: 500 }}>
@@ -1335,6 +1348,33 @@ export const Jobs: React.FC<JobsProps> = ({ setActiveTab }) => {
                 <div style={{ backgroundColor: 'rgba(236, 72, 153, 0.04)', border: '1px solid rgba(236, 72, 153, 0.15)', padding: '12px', borderRadius: '6px', fontSize: '12px', lineHeight: 1.5, color: '#a1a1aa' }}>
                   <strong style={{ color: '#ec4899', display: 'block', marginBottom: '4px' }}>RAG Ingestion Context</strong>
                   The schema fields extracted during Stage 2 are vectorized and registered in the catalog store. During Stage 4, semantic search will match these embeddings against active catalog schemas to compute candidate scores.
+                </div>
+              </div>
+            )}
+
+            {selectedGraphNode === 'inference' && !artLineage.inference && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#ef4444' }}>Stage 4: Target Inference</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
+                  <div><span style={{ color: '#71717a' }}>Status:</span> <span style={{ color: '#ef4444', fontWeight: 600 }}>FAILED</span></div>
+                  {(() => {
+                    const inferStage = activeGraphDetails.stages?.find(s => s.stage_name.toLowerCase() === 'target inference');
+                    if (inferStage && inferStage.error_message) {
+                      return (
+                        <div style={{ marginTop: '8px' }}>
+                          <span style={{ color: '#71717a', display: 'block', marginBottom: '4px' }}>Error Details:</span>
+                          <p style={{ fontSize: '13px', color: '#ef4444', lineHeight: 1.5, backgroundColor: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.15)', padding: '12px', borderRadius: '4px', margin: 0, fontFamily: 'monospace' }}>
+                            {inferStage.error_message}
+                          </p>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div style={{ color: '#a1a1aa', marginTop: '8px' }}>
+                        The target inference stage failed before completing. Check worker logs for details.
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             )}

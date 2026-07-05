@@ -39,3 +39,4 @@ class SourceUpdate(BaseModel):
     connection_details: dict | None = None
     description: str | None = None
     status: str | None = None
+    config_id: UUID | None = None

@@ -160,6 +160,14 @@ def update_source(
             detail="Source not found"
         )
 
+    if payload.config_id is not None:
+        config = db.get(ProcessingConfiguration, payload.config_id)
+        if config is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Configuration not found"
+            )
+
     updates = payload.model_dump(
         exclude_unset=True
     )

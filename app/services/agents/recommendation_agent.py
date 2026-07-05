@@ -125,6 +125,24 @@ CONSTRAINTS:
 )
 
 
+class SessionProxy:
+    """
+    Lightweight proxy wrapper for SQLAlchemy Session.
+    Bypasses deepcopy/pickling issues in Google's ADK Session Service.
+    """
+    def __init__(self, session):
+        object.__setattr__(self, "_session", session)
+
+    def __getattr__(self, name):
+        return getattr(self._session, name)
+
+    def __setattr__(self, name, value):
+        setattr(self._session, name, value)
+
+    def __deepcopy__(self, memo):
+        return self
+
+
 async def run_recommendation_agent(
     job_id: str,
     target_id: str,
@@ -145,7 +163,7 @@ async def run_recommendation_agent(
         app_name="schema_recommendation",
         user_id="system",
         state={
-            "db": db,
+            "db": SessionProxy(db),
             "job_id": job_id,
             "target_id": target_id,
             "validation_id": validation_id,

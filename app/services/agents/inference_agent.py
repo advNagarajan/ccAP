@@ -14,12 +14,38 @@ from app.services.agents.tools import (
     get_feedback_guidelines,
 )
 
+from google.adk.models.google_llm import Gemini
+from google.genai import Client
+
 logger = logging.getLogger("landing_inference.agent")
+
+
+class VertexGemini(Gemini):
+    @property
+    def api_client(self) -> Client:
+        from google.genai import Client
+        base_url, api_version = self._base_url_and_api_version
+        kwargs_for_http_options = {
+            'headers': self._tracking_headers(),
+            'retry_options': self.retry_options,
+            'base_url': base_url,
+        }
+        if api_version:
+            kwargs_for_http_options['api_version'] = api_version
+
+        kwargs = {
+            'http_options': types.HttpOptions(**kwargs_for_http_options),
+            'vertexai': True,
+            'project': settings.GCP_PROJECT_ID,
+            'location': settings.GCP_LOCATION,
+        }
+        return Client(**kwargs)
+
 
 # Define the Inference Agent
 inference_agent = LlmAgent(
     name="InferenceAgent",
-    model=settings.VERTEX_GENERATIVE_MODEL or "gemini-2.5-flash",
+    model=VertexGemini(model=settings.VERTEX_GENERATIVE_MODEL or "gemini-2.5-flash"),
     description="Selects the optimal target landing zone and maps source schema fields.",
     instruction="""You are an expert data engineer on a schema intelligence platform.
 

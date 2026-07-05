@@ -21,15 +21,32 @@ from google.genai import Client
 logger = logging.getLogger("landing_inference.agent")
 
 
+import asyncio
+
 class VertexGemini(Gemini):
-    @cached_property
+    @property
     def api_client(self) -> Client:
+        if not hasattr(self, "_clients_by_loop"):
+            self._clients_by_loop = {}
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop is not None:
+            if loop not in self._clients_by_loop:
+                self._clients_by_loop[loop] = self._create_api_client()
+            return self._clients_by_loop[loop]
+        return self._create_api_client()
+
+    def _create_api_client(self) -> Client:
         from google.genai import Client
         base_url, api_version = self._base_url_and_api_version
         kwargs_for_http_options = {
             'headers': self._tracking_headers(),
             'retry_options': self.retry_options,
             'base_url': base_url,
+            'timeout': 60,
         }
         if api_version:
             kwargs_for_http_options['api_version'] = api_version
@@ -42,8 +59,22 @@ class VertexGemini(Gemini):
         }
         return Client(**kwargs)
 
-    @cached_property
+    @property
     def _live_api_client(self) -> Client:
+        if not hasattr(self, "_live_clients_by_loop"):
+            self._live_clients_by_loop = {}
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop is not None:
+            if loop not in self._live_clients_by_loop:
+                self._live_clients_by_loop[loop] = self._create_live_api_client()
+            return self._live_clients_by_loop[loop]
+        return self._create_live_api_client()
+
+    def _create_live_api_client(self) -> Client:
         from google.genai import Client
         base_url, _ = self._base_url_and_api_version
         kwargs = {
@@ -51,6 +82,7 @@ class VertexGemini(Gemini):
                 headers=self._tracking_headers(),
                 api_version=self._live_api_version,
                 base_url=base_url,
+                timeout=60,
             ),
             'vertexai': True,
             'project': settings.GCP_PROJECT_ID,

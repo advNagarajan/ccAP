@@ -1181,7 +1181,7 @@ export const Jobs: React.FC<JobsProps> = ({ setActiveTab }) => {
                           >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                               <span style={{ fontSize: '12px', fontWeight: 600, color: '#fafafa' }}>
-                                {rule.type.replace(/_/g, ' ').toUpperCase()}
+                                {(rule.rule_type || rule.type || 'UNKNOWN_RULE').replace(/_/g, ' ').toUpperCase()}
                               </span>
                               <span style={{ fontSize: '10px', fontWeight: 700, color: rColor }}>
                                 {rule.status}

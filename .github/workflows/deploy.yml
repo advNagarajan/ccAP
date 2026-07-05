@@ -224,7 +224,7 @@ jobs:
         run: |
           URL=$(gcloud run services describe ${{ matrix.worker.name }} --region ${{ vars.REGION }} --format="value(status.url)")
           echo "Testing live URL: $URL"
-          TOKEN=$(gcloud auth print-identity-token --audiences="$URL")
+          TOKEN=$(gcloud auth print-identity-token --impersonate-service-account="${{ secrets.SERVICE_ACCOUNT_EMAIL }}" --audiences="$URL")
           for i in {1..3}; do
             STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" "$URL/")
             echo "Attempt $i: HTTP Status $STATUS_CODE"

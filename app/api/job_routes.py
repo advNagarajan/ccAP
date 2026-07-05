@@ -391,47 +391,65 @@ def get_job_details(
     parent_job_summary = get_parent_job_summary(job.parent_job_id, db) if job.parent_job_id else None
 
     # 4. Fetch associated details per artifact
-    inferences = db.execute(
-        select(LandingInference).where(LandingInference.job_id == job_id)
+    # Find all artifacts processed in this job via profiles or inferences
+    profile_artifact_ids = db.execute(
+        select(MetadataProfile.artifact_id).where(MetadataProfile.job_id == job_id)
     ).scalars().all()
 
-    artifact_details = []
-    for inf in inferences:
-        artifact = db.get(ArtifactRecord, inf.artifact_id)
-        if not artifact:
-            continue
+    inference_artifact_ids = db.execute(
+        select(LandingInference.artifact_id).where(LandingInference.job_id == job_id)
+    ).scalars().all()
 
-        validation = db.execute(
-            select(SchemaValidation).where(SchemaValidation.inference_id == inf.inference_id)
+    # Combine and deduplicate
+    job_artifact_ids = list(set(profile_artifact_ids + inference_artifact_ids))
+
+    artifact_records = []
+    if job_artifact_ids:
+        artifact_records = db.execute(
+            select(ArtifactRecord).where(ArtifactRecord.artifact_id.in_(job_artifact_ids))
+        ).scalars().all()
+
+    artifact_details = []
+    for artifact in artifact_records:
+        inf = db.execute(
+            select(LandingInference).where(
+                LandingInference.job_id == job_id,
+                LandingInference.artifact_id == artifact.artifact_id
+            )
         ).scalar_one_or_none()
 
+        validation = None
         drift = None
-        if validation:
-            drift = db.execute(
-                select(SchemaDrift).where(SchemaDrift.validation_id == validation.validation_id)
-            ).scalar_one_or_none()
-
         rec = None
-        if validation:
-            rec = db.execute(
-                select(SchemaRecommendation).where(SchemaRecommendation.validation_id == validation.validation_id)
-            ).scalar_one_or_none()
-
         fallback = None
-        if validation:
-            fallback = db.execute(
-                select(SchemaFallbackRequest).where(SchemaFallbackRequest.validation_id == validation.validation_id)
+        target_id = None
+
+        if inf:
+            validation = db.execute(
+                select(SchemaValidation).where(SchemaValidation.inference_id == inf.inference_id)
             ).scalar_one_or_none()
 
-        target_id = None
-        if rec and rec.target_id:
-            target_id = rec.target_id
-        elif drift and drift.target_id:
-            target_id = drift.target_id
-        elif validation and validation.target_id:
-            target_id = validation.target_id
-        elif inf.target_id:
-            target_id = inf.target_id
+            if validation:
+                drift = db.execute(
+                    select(SchemaDrift).where(SchemaDrift.validation_id == validation.validation_id)
+                ).scalar_one_or_none()
+
+                rec = db.execute(
+                    select(SchemaRecommendation).where(SchemaRecommendation.validation_id == validation.validation_id)
+                ).scalar_one_or_none()
+
+                fallback = db.execute(
+                    select(SchemaFallbackRequest).where(SchemaFallbackRequest.validation_id == validation.validation_id)
+                ).scalar_one_or_none()
+
+            if rec and rec.target_id:
+                target_id = rec.target_id
+            elif drift and drift.target_id:
+                target_id = drift.target_id
+            elif validation and validation.target_id:
+                target_id = validation.target_id
+            elif inf.target_id:
+                target_id = inf.target_id
 
         target = db.get(TargetCatalog, target_id) if target_id else None
 
@@ -542,7 +560,7 @@ def get_job_details(
                 "created_at": inf.created_at,
                 "matched_target_table": target.target_name if target else None,
                 "matched_target_id": target.target_id if target else None
-            },
+            } if inf else None,
             "validation": validation_summary,
             "drift": drift_summary,
             "recommendation": rec_summary,
@@ -551,7 +569,7 @@ def get_job_details(
             "data_quality": dq_report_summary
         })
 
-    # If no inferences yet, fall back to base artifacts associated with the source
+    # If no inferences or profiles yet, fall back to base artifacts associated with the source
     if not artifact_details:
         all_artifacts = db.execute(
             select(ArtifactRecord).where(ArtifactRecord.source_id == job.source_id)

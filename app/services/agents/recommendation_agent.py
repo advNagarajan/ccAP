@@ -202,7 +202,6 @@ CONSTRAINTS:
         get_historical_recommendations,
         get_recommendation_feedback,
     ],
-    max_turns=12,
 )
 
 

@@ -148,7 +148,6 @@ CONSTRAINTS:
         check_type_compatibility,
         get_feedback_guidelines,
     ],
-    max_turns=10,
 )
 
 

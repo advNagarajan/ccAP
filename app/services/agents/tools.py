@@ -22,7 +22,7 @@ from app.constants.compatibility import COMPATIBILITY_MATRIX
 logger = logging.getLogger("landing_inference.tools")
 
 
-def search_candidate_targets(
+async def search_candidate_targets(
     source_summary: str,
     tool_context: ToolContext
 ) -> str:
@@ -118,7 +118,7 @@ def search_candidate_targets(
     return json.dumps(candidates, indent=2)
 
 
-def get_target_schema_details(
+async def get_target_schema_details(
     target_id: str,
     tool_context: ToolContext
 ) -> str:
@@ -150,7 +150,7 @@ def get_target_schema_details(
     return json.dumps(optimized_json, indent=2)
 
 
-def check_type_compatibility(
+async def check_type_compatibility(
     source_type: str,
     target_type: str
 ) -> str:
@@ -199,7 +199,7 @@ def check_type_compatibility(
     }, indent=2)
 
 
-def get_feedback_guidelines(
+async def get_feedback_guidelines(
     tool_context: ToolContext
 ) -> str:
     """
@@ -239,7 +239,7 @@ def get_feedback_guidelines(
     return json.dumps(guidelines, indent=2)
 
 
-def get_validation_report(
+async def get_validation_report(
     validation_id: str,
     tool_context: ToolContext
 ) -> str:
@@ -267,7 +267,7 @@ def get_validation_report(
     }, indent=2)
 
 
-def get_drift_report(
+async def get_drift_report(
     drift_id: str,
     tool_context: ToolContext
 ) -> str:
@@ -291,7 +291,7 @@ def get_drift_report(
     }, indent=2)
 
 
-def get_source_metadata(
+async def get_source_metadata(
     tool_context: ToolContext
 ) -> str:
     """
@@ -318,7 +318,7 @@ def get_source_metadata(
     return json.dumps(optimized_json, indent=2)
 
 
-def get_data_quality_report(
+async def get_data_quality_report(
     tool_context: ToolContext
 ) -> str:
     """
@@ -354,7 +354,7 @@ def get_data_quality_report(
     }, indent=2)
 
 
-def get_historical_recommendations(
+async def get_historical_recommendations(
     target_id: str,
     tool_context: ToolContext
 ) -> str:
@@ -389,7 +389,7 @@ def get_historical_recommendations(
     return json.dumps(recs, indent=2)
 
 
-def get_recommendation_feedback(
+async def get_recommendation_feedback(
     tool_context: ToolContext
 ) -> str:
     """

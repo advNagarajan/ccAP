@@ -48,7 +48,7 @@ def test_tool_get_validation_report():
 
     tool_context = MagicMock()
     tool_context.state = {"db": db}
-    res_str = get_validation_report(str(val_id), tool_context)
+    res_str = asyncio.run(get_validation_report(str(val_id), tool_context))
     res = json.loads(res_str)
 
     assert res["validation_status"] == "DRIFTED"
@@ -69,7 +69,7 @@ def test_tool_get_drift_report():
 
     tool_context = MagicMock()
     tool_context.state = {"db": db}
-    res_str = get_drift_report(str(drift_id), tool_context)
+    res_str = asyncio.run(get_drift_report(str(drift_id), tool_context))
     res = json.loads(res_str)
 
     assert res["drift_status"] == "DRIFTED"
@@ -96,7 +96,7 @@ def test_tool_get_source_metadata():
 
     tool_context = MagicMock()
     tool_context.state = {"db": db, "job_id": str(job_id)}
-    res_str = get_source_metadata(tool_context)
+    res_str = asyncio.run(get_source_metadata(tool_context))
     res = json.loads(res_str)
 
     assert res["statistics"]["row_count"] == 100
@@ -123,7 +123,7 @@ def test_tool_get_data_quality_report():
 
     tool_context = MagicMock()
     tool_context.state = {"db": db, "job_id": str(job_id)}
-    res_str = get_data_quality_report(tool_context)
+    res_str = asyncio.run(get_data_quality_report(tool_context))
     res = json.loads(res_str)
 
     assert res["status"] == "PASSED"
@@ -148,7 +148,7 @@ def test_tool_get_historical_recommendations():
 
     tool_context = MagicMock()
     tool_context.state = {"db": db}
-    res_str = get_historical_recommendations(str(target_id), tool_context)
+    res_str = asyncio.run(get_historical_recommendations(str(target_id), tool_context))
     res = json.loads(res_str)
 
     assert len(res) == 1
@@ -171,7 +171,7 @@ def test_tool_get_recommendation_feedback():
 
     tool_context = MagicMock()
     tool_context.state = {"db": db}
-    res_str = get_recommendation_feedback(tool_context)
+    res_str = asyncio.run(get_recommendation_feedback(tool_context))
     res = json.loads(res_str)
 
     assert len(res) == 1

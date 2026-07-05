@@ -25,19 +25,19 @@ from workers.inference.processor import infer_target_landing_zone
 
 def test_tool_check_type_compatibility():
     # Compatible
-    res = json.loads(check_type_compatibility("int", "INTEGER"))
+    res = json.loads(asyncio.run(check_type_compatibility("int", "INTEGER")))
     assert res["status"] == "COMPATIBLE"
 
     # Warning
-    res = json.loads(check_type_compatibility("float", "INTEGER"))
+    res = json.loads(asyncio.run(check_type_compatibility("float", "INTEGER")))
     assert res["status"] == "WARNING"
 
     # Incompatible
-    res = json.loads(check_type_compatibility("dict", "INTEGER"))
+    res = json.loads(asyncio.run(check_type_compatibility("dict", "INTEGER")))
     assert res["status"] == "INCOMPATIBLE"
 
     # Deferred (e.g. unknown or NoSQL/file targets)
-    res = json.loads(check_type_compatibility("dict", "UNKNOWN_TYPE"))
+    res = json.loads(asyncio.run(check_type_compatibility("dict", "UNKNOWN_TYPE")))
     assert res["status"] == "DEFERRED"
 
 
@@ -62,7 +62,7 @@ def test_tool_get_feedback_guidelines():
 
     tool_context = MagicMock()
     tool_context.state = {"db": db}
-    res_str = get_feedback_guidelines(tool_context)
+    res_str = asyncio.run(get_feedback_guidelines(tool_context))
     res = json.loads(res_str)
 
     assert len(res) == 2
@@ -90,7 +90,7 @@ def test_tool_get_target_schema_details():
 
     tool_context = MagicMock()
     tool_context.state = {"db": db}
-    res_str = get_target_schema_details(str(target_id), tool_context)
+    res_str = asyncio.run(get_target_schema_details(str(target_id), tool_context))
     res = json.loads(res_str)
 
     assert res["target_name"] == "test_target"
@@ -120,7 +120,7 @@ def test_tool_search_candidate_targets_predefined():
         "db": db,
         "predefined_target_ids": [str(target_id)]
     }
-    res_str = search_candidate_targets("summary text", tool_context)
+    res_str = asyncio.run(search_candidate_targets("summary text", tool_context))
     res = json.loads(res_str)
 
     assert len(res) == 1
@@ -147,7 +147,7 @@ def test_tool_search_candidate_targets_semantic():
         "predefined_target_ids": [],
         "source_embedding": [0.1, 0.2, 0.3]
     }
-    res_str = search_candidate_targets("summary text", tool_context)
+    res_str = asyncio.run(search_candidate_targets("summary text", tool_context))
     res = json.loads(res_str)
 
     assert len(res) == 1

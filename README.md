@@ -259,7 +259,15 @@ The frontend react assets (`dist/`) are synchronized to a static **Google Cloud 
 
 ### GitHub Actions CI/CD (Workload Identity Federation)
 Deployments are automated in [.github/workflows/deploy.yml](file:///.github/workflows/deploy.yml). The workflow:
-1. Performs automated test checks.
+1. Performs automated test checks pre-deployment.
 2. Authenticates to GCP using OIDC Workload Identity Federation (WIF).
 3. Builds and pushes the Docker image to **Artifact Registry**.
-4. Deploys services to **Cloud Run** and syncs compiled assets to the GCS frontend bucket.
+4. Deploys the Backend API and 11 Worker Services in parallel.
+5. Runs OIDC-authenticated HTTP GET validation checks against each service's health endpoint.
+6. Automatically rolls back traffic/activations to the previous stable revision if the validation check fails.
+7. Syncs compiled assets to the GCS frontend bucket.
+
+### Post-Deployment Verification & Rollbacks
+* **Deep API Health Probe:** The API's root path (`/`) executes a `SELECT 1` query to verify active database pool connectivity. If the connection fails, it returns `503 Service Unavailable`.
+* **Worker Liveness Probes:** Workers expose HTTP health listeners on port `8080`. The GitHub Actions runner dynamically queries their URL, fetches a secure OIDC identity token via WIF, and asserts that the worker responds with `200 OK`.
+* **Automated Rollback:** If any smoke test fails, the CI/CD pipeline immediately calls `gcloud run services update-traffic` to redirect 100% of the service's traffic back to the previously active revision. With matrix `fail-fast: false`, each service verifies and rolls back independently.

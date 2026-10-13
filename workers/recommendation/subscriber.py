@@ -58,57 +58,11 @@ def callback_drift_detected(message):
 
 
 def start_subscriber():
-    from workers.common.dummy_server import start_dummy_server
-    start_dummy_server()
-    while True:
-        subscriber = None
-        rec_future = None
-        try:
-            subscriber = pubsub_v1.SubscriberClient()
+    from workers.common.runner import run_worker_subscriber
+    run_worker_subscriber(
+        topic_name=settings.PUBSUB_TOPIC_DRIFT_DETECTED,
+        subscription_name=settings.PUBSUB_SUBSCRIPTION_DRIFT_DETECTED,
+        callback_fn=callback_drift_detected,
+        worker_name="schema_recommendation"
+    )
 
-            rec_sub_path = subscriber.subscription_path(
-                settings.GCP_PROJECT_ID,
-                settings.PUBSUB_SUBSCRIPTION_DRIFT_DETECTED
-            )
-
-            logger.info(f"Subscribing to drift detected: {rec_sub_path}")
-            rec_future = subscriber.subscribe(
-                rec_sub_path,
-                callback=callback_drift_detected
-            )
-
-            logger.info("Schema Recommendation Worker started. Listening on drift-detected subscriptions...")
-            
-            # Non-blocking poll loop to allow clean KeyboardInterrupt handling
-            while rec_future.running():
-                time.sleep(1)
-                
-            if rec_future.done() and rec_future.exception():
-                rec_future.result()
-
-        except KeyboardInterrupt:
-            logger.info("Schema Recommendation Worker stopped by user.")
-            if rec_future:
-                try:
-                    rec_future.cancel()
-                except Exception:
-                    pass
-            if subscriber:
-                try:
-                    subscriber.close()
-                except Exception:
-                    pass
-            break
-        except Exception as e:
-            logger.error(f"Schema Recommendation Subscriber encountered an error: {e}. Reconnecting in 10 seconds...", exc_info=True)
-            if rec_future:
-                try:
-                    rec_future.cancel()
-                except Exception:
-                    pass
-            if subscriber:
-                try:
-                    subscriber.close()
-                except Exception:
-                    pass
-            time.sleep(10)

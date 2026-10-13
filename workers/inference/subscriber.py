@@ -43,57 +43,11 @@ def callback_metadata_vectorized(message):
 
 
 def start_subscriber():
-    from workers.common.dummy_server import start_dummy_server
-    start_dummy_server()
-    while True:
-        subscriber = None
-        future = None
-        try:
-            subscriber = pubsub_v1.SubscriberClient()
+    from workers.common.runner import run_worker_subscriber
+    run_worker_subscriber(
+        topic_name=settings.PUBSUB_TOPIC_METADATA_VECTORIZED,
+        subscription_name=settings.PUBSUB_SUBSCRIPTION_METADATA_VECTORIZED,
+        callback_fn=callback_metadata_vectorized,
+        worker_name="target_inference"
+    )
 
-            sub_path = subscriber.subscription_path(
-                settings.GCP_PROJECT_ID,
-                settings.PUBSUB_SUBSCRIPTION_METADATA_VECTORIZED
-            )
-
-            logger.info(f"Subscribing to metadata vectorized: {sub_path}")
-            future = subscriber.subscribe(
-                sub_path,
-                callback=callback_metadata_vectorized
-            )
-
-            logger.info("Target Inference Worker started. Listening on subscriptions...")
-            
-            # Non-blocking poll loop to allow clean KeyboardInterrupt handling
-            while future.running():
-                time.sleep(1)
-                
-            if future.done() and future.exception():
-                future.result()
-
-        except KeyboardInterrupt:
-            logger.info("Target Inference Worker stopped by user.")
-            if future:
-                try:
-                    future.cancel()
-                except Exception:
-                    pass
-            if subscriber:
-                try:
-                    subscriber.close()
-                except Exception:
-                    pass
-            break
-        except Exception as e:
-            logger.error(f"Target Inference Subscriber encountered an error: {e}. Reconnecting in 10 seconds...", exc_info=True)
-            if future:
-                try:
-                    future.cancel()
-                except Exception:
-                    pass
-            if subscriber:
-                try:
-                    subscriber.close()
-                except Exception:
-                    pass
-            time.sleep(10)

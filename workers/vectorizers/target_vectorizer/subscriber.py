@@ -118,6 +118,35 @@ def callback_feedback(message):
 def start_subscriber():
     from workers.common.dummy_server import start_dummy_server
     start_dummy_server()
+
+    is_azure = (
+        settings.CLOUD_PROVIDER.lower() == "azure" or
+        (bool(settings.AZURE_SERVICEBUS_CONNECTION_STRING) and settings.GCP_PROJECT_ID == "your-gcp-project-id")
+    )
+
+    if is_azure:
+        import threading
+        from workers.common.azure_subscriber import start_azure_subscriber
+        logger.info("Target Vectorizer Worker dispatching in Azure Service Bus mode...")
+        t1 = threading.Thread(
+            target=start_azure_subscriber,
+            args=(settings.PUBSUB_TOPIC_TARGET_MUTATED, settings.PUBSUB_SUBSCRIPTION_TARGET_MUTATED, callback_mutation),
+            daemon=True
+        )
+        t2 = threading.Thread(
+            target=start_azure_subscriber,
+            args=(settings.PUBSUB_TOPIC_FEEDBACK_SUBMITTED, settings.PUBSUB_SUBSCRIPTION_FEEDBACK_SUBMITTED, callback_feedback),
+            daemon=True
+        )
+        t1.start()
+        t2.start()
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            logger.info("Target Vectorizer stopped by user.")
+        return
+
     while True:
         subscriber = None
         mutation_future = None
@@ -129,6 +158,7 @@ def start_subscriber():
                 settings.GCP_PROJECT_ID,
                 settings.PUBSUB_SUBSCRIPTION_TARGET_MUTATED
             )
+
             feedback_sub_path = subscriber.subscription_path(
                 settings.GCP_PROJECT_ID,
                 settings.PUBSUB_SUBSCRIPTION_FEEDBACK_SUBMITTED

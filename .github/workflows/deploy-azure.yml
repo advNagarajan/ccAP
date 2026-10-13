@@ -1,0 +1,293 @@
+name: Deploy to Azure Container Apps
+
+on:
+  workflow_dispatch: # Allows manual trigger from GitHub Actions UI
+  push:
+    branches:
+      - main
+    paths:
+      - 'app/**'
+      - 'workers/**'
+      - 'frontend/**'
+      - 'Dockerfile'
+      - 'requirements.txt'
+      - '.github/workflows/deploy-azure.yml'
+
+concurrency:
+  group: production-azure
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # =========================================================================
+  # 1. RUN pytest SUITES
+  # =========================================================================
+  test:
+    name: Run Pytest Suites
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'requirements.txt'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run pytest
+        env:
+          PYTHONPATH: .
+          CLOUD_PROVIDER: azure
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: test_db
+          DB_USER: postgres
+          DB_PASSWORD: password
+        run: |
+          pytest tests/profiler_vectorizer/ tests/validation_drift/ tests/quality/
+
+  # =========================================================================
+  # 2. BUILD AND PUSH IMAGE TO AZURE CONTAINER REGISTRY (ACR)
+  # =========================================================================
+  build:
+    name: Build and Push Image (ACR)
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: "${{ secrets.AZURE_CREDENTIALS != '' || secrets.AZURE_CLIENT_ID != '' }}"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Azure CLI
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Log in to Azure Container Registry
+        run: |
+          az acr login --name ${{ vars.AZURE_ACR_NAME }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            ${{ vars.AZURE_ACR_NAME }}.azurecr.io/backend:${{ github.sha }}
+            ${{ vars.AZURE_ACR_NAME }}.azurecr.io/backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # =========================================================================
+  # 3. DEPLOY FastAPI BACKEND API TO AZURE CONTAINER APPS
+  # =========================================================================
+  deploy-api:
+    name: Deploy Backend API (ACA)
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - name: Log in to Azure CLI
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy backend-api Container App
+        run: |
+          IMAGE_TAG="${{ vars.AZURE_ACR_NAME }}.azurecr.io/backend:${{ github.sha }}"
+          
+          # Create or update container app
+          az containerapp create \
+            --name backend-api \
+            --resource-group ${{ vars.AZURE_RESOURCE_GROUP }} \
+            --environment ${{ vars.AZURE_CONTAINER_APP_ENV }} \
+            --image "$IMAGE_TAG" \
+            --target-port 8000 \
+            --ingress external \
+            --min-replicas 1 \
+            --max-replicas 5 \
+            --env-vars \
+              "CLOUD_PROVIDER=azure" \
+              "DB_HOST=${{ vars.DB_HOST }}" \
+              "DB_PORT=${{ vars.DB_PORT }}" \
+              "DB_NAME=${{ vars.DB_NAME }}" \
+              "DB_USER=${{ vars.DB_USER }}" \
+              "SMTP_HOST=${{ vars.SMTP_HOST }}" \
+              "SMTP_PORT=${{ vars.SMTP_PORT }}" \
+              "NOTIFICATION_EMAIL_SENDER=${{ vars.NOTIFICATION_EMAIL_SENDER }}" \
+            --secrets \
+              "db-password=${{ secrets.DB_PASSWORD }}" \
+              "servicebus-conn=${{ secrets.AZURE_SERVICEBUS_CONNECTION_STRING }}" \
+              "storage-conn=${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}" \
+              "slack-url=${{ secrets.SLACK_WEBHOOK_URL }}" \
+              "slack-dead-letter=${{ secrets.SLACK_WEBHOOK_DEAD_LETTER }}" \
+              "slack-completed=${{ secrets.SLACK_WEBHOOK_JOB_COMPLETED }}" \
+              "slack-failed=${{ secrets.SLACK_WEBHOOK_JOB_FAILED }}" \
+              "slack-quality=${{ secrets.SLACK_WEBHOOK_QUALITY_CHECK }}" \
+              "smtp-password=${{ secrets.SMTP_PASSWORD }}" \
+            || az containerapp update \
+            --name backend-api \
+            --resource-group ${{ vars.AZURE_RESOURCE_GROUP }} \
+            --image "$IMAGE_TAG"
+
+      - name: Smoke Test Backend API
+        run: |
+          API_URL=$(az containerapp show --name backend-api --resource-group ${{ vars.AZURE_RESOURCE_GROUP }} --query "properties.configuration.ingress.fqdn" -o tsv)
+          echo "Testing live URL: https://$API_URL/"
+          for i in {1..5}; do
+            STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://$API_URL/")
+            echo "Attempt $i: HTTP Status $STATUS_CODE"
+            if [ "$STATUS_CODE" -eq 200 ]; then
+              echo "Smoke test passed!"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Smoke test failed!"
+          exit 1
+
+  # =========================================================================
+  # 4. DEPLOY WORKERS TO AZURE CONTAINER APPS
+  # =========================================================================
+  deploy-workers:
+    name: Deploy Workers
+    needs: deploy-api
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    strategy:
+      fail-fast: false
+      matrix:
+        worker:
+          - name: worker-ingestion
+            module: workers.ingestion.main
+          - name: worker-metadata
+            module: workers.metadata.main
+          - name: worker-metadata-vectorizer
+            module: workers.vectorizers.metadata_vectorizer.main
+          - name: worker-inference
+            module: workers.inference.main
+          - name: worker-validation
+            module: workers.validation.main
+          - name: worker-drift
+            module: workers.drift.main
+          - name: worker-recommendation
+            module: workers.recommendation.main
+          - name: worker-notification
+            module: workers.notification.main
+          - name: worker-target-vectorizer
+            module: workers.vectorizers.target_vectorizer.main
+          - name: worker-quality
+            module: workers.quality.main
+    steps:
+      - name: Log in to Azure CLI
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy ${{ matrix.worker.name }}
+        run: |
+          IMAGE_TAG="${{ vars.AZURE_ACR_NAME }}.azurecr.io/backend:${{ github.sha }}"
+
+          az containerapp create \
+            --name ${{ matrix.worker.name }} \
+            --resource-group ${{ vars.AZURE_RESOURCE_GROUP }} \
+            --environment ${{ vars.AZURE_CONTAINER_APP_ENV }} \
+            --image "$IMAGE_TAG" \
+            --command python \
+            --args -m ${{ matrix.worker.module }} \
+            --min-replicas 1 \
+            --max-replicas 3 \
+            --env-vars \
+              "CLOUD_PROVIDER=azure" \
+              "DB_HOST=${{ vars.DB_HOST }}" \
+              "DB_PORT=${{ vars.DB_PORT }}" \
+              "DB_NAME=${{ vars.DB_NAME }}" \
+              "DB_USER=${{ vars.DB_USER }}" \
+              "SMTP_HOST=${{ vars.SMTP_HOST }}" \
+              "SMTP_PORT=${{ vars.SMTP_PORT }}" \
+              "NOTIFICATION_EMAIL_SENDER=${{ vars.NOTIFICATION_EMAIL_SENDER }}" \
+            --secrets \
+              "db-password=${{ secrets.DB_PASSWORD }}" \
+              "servicebus-conn=${{ secrets.AZURE_SERVICEBUS_CONNECTION_STRING }}" \
+              "storage-conn=${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}" \
+              "slack-url=${{ secrets.SLACK_WEBHOOK_URL }}" \
+              "slack-dead-letter=${{ secrets.SLACK_WEBHOOK_DEAD_LETTER }}" \
+              "slack-completed=${{ secrets.SLACK_WEBHOOK_JOB_COMPLETED }}" \
+              "slack-failed=${{ secrets.SLACK_WEBHOOK_JOB_FAILED }}" \
+              "slack-quality=${{ secrets.SLACK_WEBHOOK_QUALITY_CHECK }}" \
+              "smtp-password=${{ secrets.SMTP_PASSWORD }}" \
+            || az containerapp update \
+            --name ${{ matrix.worker.name }} \
+            --resource-group ${{ vars.AZURE_RESOURCE_GROUP }} \
+            --image "$IMAGE_TAG" \
+            --args -m ${{ matrix.worker.module }}
+
+  # =========================================================================
+  # 5. BUILD & DEPLOY FRONTEND TO AZURE STORAGE STATIC WEBSITE
+  # =========================================================================
+  deploy-frontend:
+    name: Deploy Frontend to Azure Storage
+    needs: deploy-api
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci --prefix frontend
+
+      - name: Log in to Azure CLI
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Build and Sync Frontend
+        run: |
+          API_FQDN=$(az containerapp show --name backend-api --resource-group ${{ vars.AZURE_RESOURCE_GROUP }} --query "properties.configuration.ingress.fqdn" -o tsv)
+          echo "Discovered Backend API URL: https://$API_FQDN"
+
+          # Compile React frontend pointing to backend Container App
+          VITE_API_URL="https://$API_FQDN" npm run build --prefix frontend
+
+          # Upload static bundle to $web static website container
+          az storage blob upload-batch \
+            --account-name ${{ vars.AZURE_FRONTEND_STORAGE_NAME }} \
+            --destination '$web' \
+            --source frontend/dist \
+            --overwrite true
+
+          # Purge Azure CDN edge cache (if CDN is provisioned)
+          if [ -n "${{ vars.AZURE_CDN_PROFILE }}" ] && [ -n "${{ vars.AZURE_CDN_ENDPOINT }}" ]; then
+            echo "Purging Azure CDN endpoint cache..."
+            az cdn endpoint purge \
+              --resource-group ${{ vars.AZURE_RESOURCE_GROUP }} \
+              --profile-name ${{ vars.AZURE_CDN_PROFILE }} \
+              --name ${{ vars.AZURE_CDN_ENDPOINT }} \
+              --content-paths "/*" || true
+          fi

@@ -11,9 +11,18 @@ class Settings(BaseSettings):
     DB_PASSWORD: str
     CLOUD_SQL_CONNECTION_NAME: str | None = None
 
+    # Cloud Provider Switch ("gcp" or "azure")
+    CLOUD_PROVIDER: str = "gcp"
+
     # GCP Core
-    GCP_PROJECT_ID: str
+    GCP_PROJECT_ID: str = "your-gcp-project-id"
     GCP_LOCATION: str = "us-central1"
+
+    # Azure Core
+    AZURE_SERVICEBUS_CONNECTION_STRING: str | None = None
+    AZURE_STORAGE_CONNECTION_STRING: str | None = None
+    AZURE_LANDING_CONTAINER: str = "landing"
+
 
     # GCP Pub/Sub Topics
     PUBSUB_TOPIC_INGESTION_REQUESTED: str = "ingestion-requested"

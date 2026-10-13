@@ -55,57 +55,11 @@ def callback_schema_validated(message):
 
 
 def start_subscriber():
-    from workers.common.dummy_server import start_dummy_server
-    start_dummy_server()
-    while True:
-        subscriber = None
-        drift_future = None
-        try:
-            subscriber = pubsub_v1.SubscriberClient()
+    from workers.common.runner import run_worker_subscriber
+    run_worker_subscriber(
+        topic_name=settings.PUBSUB_TOPIC_SCHEMA_VALIDATED,
+        subscription_name=settings.PUBSUB_SUBSCRIPTION_SCHEMA_VALIDATED,
+        callback_fn=callback_schema_validated,
+        worker_name="schema_drift"
+    )
 
-            drift_sub_path = subscriber.subscription_path(
-                settings.GCP_PROJECT_ID,
-                settings.PUBSUB_SUBSCRIPTION_SCHEMA_VALIDATED
-            )
-
-            logger.info(f"Subscribing to schema validated: {drift_sub_path}")
-            drift_future = subscriber.subscribe(
-                drift_sub_path,
-                callback=callback_schema_validated
-            )
-
-            logger.info("Schema Drift Worker started. Listening on schema-validated subscriptions...")
-            
-            # Non-blocking poll loop to allow clean KeyboardInterrupt handling
-            while drift_future.running():
-                time.sleep(1)
-                
-            if drift_future.done() and drift_future.exception():
-                drift_future.result()
-
-        except KeyboardInterrupt:
-            logger.info("Schema Drift Worker stopped by user.")
-            if drift_future:
-                try:
-                    drift_future.cancel()
-                except Exception:
-                    pass
-            if subscriber:
-                try:
-                    subscriber.close()
-                except Exception:
-                    pass
-            break
-        except Exception as e:
-            logger.error(f"Schema Drift Subscriber encountered an error: {e}. Reconnecting in 10 seconds...", exc_info=True)
-            if drift_future:
-                try:
-                    drift_future.cancel()
-                except Exception:
-                    pass
-            if subscriber:
-                try:
-                    subscriber.close()
-                except Exception:
-                    pass
-            time.sleep(10)

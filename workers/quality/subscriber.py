@@ -49,56 +49,11 @@ def callback_quality_check_requested(message):
 
 
 def start_subscriber():
-    from workers.common.dummy_server import start_dummy_server
-    start_dummy_server()
-    while True:
-        subscriber = None
-        quality_future = None
-        try:
-            subscriber = pubsub_v1.SubscriberClient()
+    from workers.common.runner import run_worker_subscriber
+    run_worker_subscriber(
+        topic_name=settings.PUBSUB_TOPIC_QUALITY_CHECK_REQUESTED,
+        subscription_name=settings.PUBSUB_SUBSCRIPTION_QUALITY_CHECK_REQUESTED,
+        callback_fn=callback_quality_check_requested,
+        worker_name="data_quality"
+    )
 
-            quality_sub_path = subscriber.subscription_path(
-                settings.GCP_PROJECT_ID,
-                settings.PUBSUB_SUBSCRIPTION_QUALITY_CHECK_REQUESTED
-            )
-
-            logger.info(f"Subscribing to quality check requested: {quality_sub_path}")
-            quality_future = subscriber.subscribe(
-                quality_sub_path,
-                callback=callback_quality_check_requested
-            )
-
-            logger.info("Data Quality Worker started. Listening on quality-check-requested subscriptions...")
-            
-            while quality_future.running():
-                time.sleep(1)
-                
-            if quality_future.done() and quality_future.exception():
-                quality_future.result()
-
-        except KeyboardInterrupt:
-            logger.info("Data Quality Worker stopped by user.")
-            if quality_future:
-                try:
-                    quality_future.cancel()
-                except Exception:
-                    pass
-            if subscriber:
-                try:
-                    subscriber.close()
-                except Exception:
-                    pass
-            break
-        except Exception as e:
-            logger.error(f"Data Quality Subscriber encountered an error: {e}. Reconnecting in 10 seconds...", exc_info=True)
-            if quality_future:
-                try:
-                    quality_future.cancel()
-                except Exception:
-                    pass
-            if subscriber:
-                try:
-                    subscriber.close()
-                except Exception:
-                    pass
-            time.sleep(10)

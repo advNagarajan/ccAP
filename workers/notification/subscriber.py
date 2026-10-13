@@ -38,11 +38,23 @@ def start_subscriber():
         "quality-check-completed": settings.PUBSUB_SUBSCRIPTION_QUALITY_CHECK_COMPLETED
     }
 
+    is_azure = (
+        settings.CLOUD_PROVIDER.lower() == "azure" or
+        (bool(settings.AZURE_SERVICEBUS_CONNECTION_STRING) and settings.GCP_PROJECT_ID == "your-gcp-project-id")
+    )
+
+    if is_azure:
+        from workers.common.azure_subscriber import start_azure_multi_subscriber
+        logger.info("Notification Worker dispatching in Azure Service Bus mode...")
+        start_azure_multi_subscriber(subscriptions, make_callback)
+        return
+
     while True:
         subscriber = None
         futures = []
         try:
             subscriber = pubsub_v1.SubscriberClient()
+
             for topic_name, sub_name in subscriptions.items():
                 if not sub_name:
                     logger.warning(f"Subscription for {topic_name} is not configured. Skipping.")

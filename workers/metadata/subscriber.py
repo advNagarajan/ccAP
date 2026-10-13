@@ -43,54 +43,10 @@ def callback(message):
 
 
 def start_subscriber():
-    from workers.common.dummy_server import start_dummy_server
-    start_dummy_server()
-    while True:
-        subscriber = None
-        streaming_pull_future = None
-        try:
-            subscriber = pubsub_v1.SubscriberClient()
-            subscription_path = subscriber.subscription_path(
-                settings.GCP_PROJECT_ID,
-                settings.PUBSUB_SUBSCRIPTION_DATASET_RECEIVED
-            )
-
-            streaming_pull_future = subscriber.subscribe(
-                subscription_path,
-                callback=callback
-            )
-
-            logger.info(f"Listening on {subscription_path}")
-
-            while streaming_pull_future.running():
-                time.sleep(1)
-
-            if streaming_pull_future.done() and streaming_pull_future.exception():
-                streaming_pull_future.result()
-
-        except KeyboardInterrupt:
-            logger.info("Subscriber stopped")
-            if streaming_pull_future:
-                try:
-                    streaming_pull_future.cancel()
-                except Exception:
-                    pass
-            if subscriber:
-                try:
-                    subscriber.close()
-                except Exception:
-                    pass
-            break
-        except Exception as e:
-            logger.error(f"Metadata Extraction Subscriber encountered an error: {e}. Reconnecting in 10 seconds...", exc_info=True)
-            if streaming_pull_future:
-                try:
-                    streaming_pull_future.cancel()
-                except Exception:
-                    pass
-            if subscriber:
-                try:
-                    subscriber.close()
-                except Exception:
-                    pass
-            time.sleep(10)
+    from workers.common.runner import run_worker_subscriber
+    run_worker_subscriber(
+        topic_name=settings.PUBSUB_TOPIC_DATASET_RECEIVED,
+        subscription_name=settings.PUBSUB_SUBSCRIPTION_DATASET_RECEIVED,
+        callback_fn=callback,
+        worker_name="metadata_extraction"
+    )

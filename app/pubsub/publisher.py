@@ -1,17 +1,45 @@
 import functools
 import json
-
-from google.cloud import pubsub_v1
+import logging
 
 from app.core.settings import settings
 
+logger = logging.getLogger("publisher")
+
+_servicebus_client = None
+
+
+def get_azure_servicebus_client():
+    global _servicebus_client
+    if _servicebus_client is None:
+        from azure.servicebus import ServiceBusClient
+        if not settings.AZURE_SERVICEBUS_CONNECTION_STRING:
+            raise ValueError("AZURE_SERVICEBUS_CONNECTION_STRING is required to publish messages on Azure Service Bus.")
+        _servicebus_client = ServiceBusClient.from_connection_string(settings.AZURE_SERVICEBUS_CONNECTION_STRING)
+    return _servicebus_client
+
+
+def publish_event_azure(topic_name: str, payload: dict) -> str:
+    from azure.servicebus import ServiceBusMessage
+    client = get_azure_servicebus_client()
+    with client.get_topic_sender(topic_name=topic_name) as sender:
+        message = ServiceBusMessage(json.dumps(payload))
+        sender.send_messages(message)
+        msg_id = str(message.message_id or "")
+        print(f"Published to Azure Service Bus topic {topic_name} message_id={msg_id}")
+        return msg_id
+
 
 @functools.lru_cache(maxsize=1)
-def get_publisher() -> pubsub_v1.PublisherClient:
+def get_publisher():
+    from google.cloud import pubsub_v1
     return pubsub_v1.PublisherClient()
 
 
 def publish_event(topic_name: str, payload: dict):
+    if settings.CLOUD_PROVIDER.lower() == "azure" or (settings.AZURE_SERVICEBUS_CONNECTION_STRING and settings.GCP_PROJECT_ID == "your-gcp-project-id"):
+        return publish_event_azure(topic_name, payload)
+
     pub = get_publisher()
     topic_path = pub.topic_path(
         settings.GCP_PROJECT_ID,
@@ -31,6 +59,7 @@ def publish_event(topic_name: str, payload: dict):
     )
 
     return message_id
+
 
 
 def publish_ingestion_requested(job_id, source_id, force_dq: bool = False):

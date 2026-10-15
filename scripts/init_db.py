@@ -133,30 +133,33 @@ def init_database():
                 config_type="SOURCE",
                 config_subtype="S3",
                 description="Default configuration with data quality rules and profiling enabled.",
-                data_quality_enabled=True,
-                data_quality_sampling={
-                    "sample_ratio": 1.0,
-                    "random_sample": False
-                },
-                data_quality_rules=[
-                    {
-                        "type": "null_check",
-                        "columns": ["email", "first_name"],
-                        "allowed_null_ratio": 0.05,
-                        "severity": "FAILED"
+                status="ACTIVE",
+                version=1,
+                config_content={
+                    "data_quality_enabled": True,
+                    "data_quality_sampling": {
+                        "sample_ratio": 1.0,
+                        "random_sample": False
                     },
-                    {
-                        "type": "uniqueness_check",
-                        "columns": ["id"],
-                        "severity": "FAILED"
-                    },
-                    {
-                        "type": "boundary_range_check",
-                        "columns": {"age": {"min": 0, "max": 120}},
-                        "severity": "WARNING"
-                    }
-                ],
-                config_content={}
+                    "data_quality_rules": [
+                        {
+                            "type": "null_check",
+                            "columns": ["email", "first_name"],
+                            "allowed_null_ratio": 0.05,
+                            "severity": "FAILED"
+                        },
+                        {
+                            "type": "uniqueness_check",
+                            "columns": ["id"],
+                            "severity": "FAILED"
+                        },
+                        {
+                            "type": "boundary_range_check",
+                            "columns": {"age": {"min": 0, "max": 120}},
+                            "severity": "WARNING"
+                        }
+                    ]
+                }
             )
             session.add(sample_config)
             session.commit()

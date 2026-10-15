@@ -73,7 +73,7 @@ class LlmFeedbackLoop(Base):
 
     user_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("metadata.users.user_id", ondelete="SET NULL"),
+        ForeignKey("control_plane.users.user_id", ondelete="SET NULL"),
         nullable=True
     )
 

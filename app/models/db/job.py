@@ -45,7 +45,7 @@ class Job(Base):
     status: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
-        server_default=text("RECEIVED")
+        server_default="RECEIVED"
     )
 
     current_stage: Mapped[str | None] = mapped_column(

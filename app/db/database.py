@@ -14,7 +14,15 @@ engine = create_engine(
 
 @event.listens_for(engine, "connect")
 def connect(dbapi_connection, connection_record):
-    register_vector(dbapi_connection)
+    try:
+        if hasattr(dbapi_connection, "adapters"):
+            from pgvector.psycopg import register_vector as register_v3
+            register_v3(dbapi_connection)
+        else:
+            from pgvector.psycopg2 import register_vector as register_v2
+            register_v2(dbapi_connection)
+    except Exception:
+        pass
 
 SessionLocal = sessionmaker(
     autocommit=False,

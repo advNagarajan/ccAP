@@ -29,7 +29,8 @@ router = APIRouter(tags=["Sources"])
 VALID_SOURCE_TYPES = {
     "BIGQUERY",
     "FIRESTORE",
-    "GCS"
+    "GCS",
+    "S3"
 }
 
 @router.post(

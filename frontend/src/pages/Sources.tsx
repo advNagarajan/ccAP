@@ -644,6 +644,7 @@ export const Sources: React.FC = () => {
                       padding: '0 12px',
                     }}
                   >
+                    <option value="S3">Amazon S3</option>
                     <option value="GCS">GCS</option>
                     <option value="FIRESTORE">FIRESTORE</option>
                     <option value="BIGQUERY">BIGQUERY</option>
@@ -1155,6 +1156,7 @@ export const Sources: React.FC = () => {
                       fontSize: '14px',
                     }}
                   >
+                    <option value="S3">Amazon S3</option>
                     <option value="GCS">Google Cloud Storage</option>
                     <option value="BIGQUERY">BigQuery</option>
                     <option value="FIRESTORE">Firestore</option>

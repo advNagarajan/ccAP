@@ -567,6 +567,7 @@ export const Targets: React.FC = () => {
                     <option value="BIGQUERY">BIGQUERY</option>
                     <option value="SNOWFLAKE">SNOWFLAKE</option>
                     <option value="DELTA">DELTA</option>
+                    <option value="S3">S3</option>
                     <option value="GCS">GCS</option>
                   </select>
                 </div>

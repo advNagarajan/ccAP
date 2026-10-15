@@ -19,7 +19,14 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
         # Suppress standard logging to prevent request spam in logs
         pass
 
+_server_started = False
+
 def start_dummy_server():
+    global _server_started
+    if _server_started:
+        return
+    _server_started = True
+
     port = int(os.environ.get("PORT", 8080))
     logger.info(f"Starting dummy HTTP health server on port {port} for Cloud Run readiness...")
     

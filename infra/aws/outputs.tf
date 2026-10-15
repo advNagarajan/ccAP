@@ -47,3 +47,9 @@ output "aws_secret_access_key" {
   value       = aws_iam_access_key.github_deployer_key.secret
   sensitive   = true
 }
+
+output "apprunner_api_url" {
+  description = "The public HTTPS URL for the serverless FastAPI backend (App Runner)"
+  value       = "https://${aws_apprunner_service.api_service.service_url}"
+}
+

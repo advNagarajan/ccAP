@@ -69,15 +69,6 @@ resource "aws_iam_user_policy" "deployer_policy" {
           "sqs:GetQueueUrl"
         ]
         Resource = "*"
-      },
-      {
-        Sid    = "AppRunnerAccess"
-        Effect = "Allow"
-        Action = [
-          "apprunner:StartDeployment",
-          "apprunner:DescribeService"
-        ]
-        Resource = "*"
       }
     ]
   })

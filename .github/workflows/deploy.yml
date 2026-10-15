@@ -1,9 +1,7 @@
 name: Deploy to Google Cloud Run
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch: # Disabled automatic trigger on push since project migrated to AWS
 
 concurrency:
   group: production

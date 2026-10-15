@@ -64,7 +64,6 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: "${{ secrets.AWS_ACCESS_KEY_ID != '' && secrets.AWS_SECRET_ACCESS_KEY != '' }}"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -103,7 +102,6 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    if: "${{ secrets.AWS_ACCESS_KEY_ID != '' && secrets.AWS_SECRET_ACCESS_KEY != '' }}"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

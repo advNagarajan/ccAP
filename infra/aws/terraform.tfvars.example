@@ -4,7 +4,7 @@
 # Copy this file to terraform.tfvars and customize for your environment:
 # cp terraform.tfvars.example terraform.tfvars
 
-aws_region             = "us-east-1"
+aws_region             = "ap-southeast-2"
 environment            = "dev"
 project_name           = "data-landing-platform"
 
@@ -14,4 +14,4 @@ ecr_repository_name    = "data-landing-platform"
 
 db_name                = "metadata_db"
 db_username            = "postgres"
-db_password            = "ChangeThisStrongPassword123!"
+db_password            = "DataLandingPass123!"

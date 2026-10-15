@@ -54,7 +54,7 @@ variable "db_password" {
   description = "Master password for PostgreSQL database"
   type        = string
   sensitive   = true
-  default     = "ChangeMeP@ssw0rd123!"
+  default     = "DataLandingPass123!"
 }
 
 # =========================================================================

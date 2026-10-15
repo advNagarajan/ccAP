@@ -16,76 +16,81 @@ from app.services.artifact_service import (
 )
 
 
-class AzureBlobConnector(BaseConnector):
+class S3Connector(BaseConnector):
     """
-    Azure Blob Storage connector implementing BaseConnector.
-    Connects to Azure Storage Containers to discover, extract, and write datasets.
+    AWS S3 Connector implementing BaseConnector.
+    Connects to Amazon S3 buckets to discover, extract, and write datasets.
     """
 
     def _get_client(self, connection_details: dict):
-        from azure.storage.blob import BlobServiceClient
+        import boto3
 
-        conn_str = (
-            connection_details.get("connection_string") or
-            settings.AZURE_STORAGE_CONNECTION_STRING
+        region = (
+            connection_details.get("region") or
+            connection_details.get("aws_region") or
+            settings.AWS_REGION or
+            "us-east-1"
         )
-        if conn_str:
-            return BlobServiceClient.from_connection_string(conn_str)
+        kwargs = {"region_name": region}
 
-        account_name = connection_details.get("account_name")
-        account_key = connection_details.get("account_key")
-        if account_name and account_key:
-            account_url = f"https://{account_name}.blob.core.windows.net"
-            return BlobServiceClient(account_url=account_url, credential=account_key)
-
-        raise ValueError(
-            "Azure Blob connection details missing. Provide 'connection_string' "
-            "or set AZURE_STORAGE_CONNECTION_STRING in your environment."
+        access_key = (
+            connection_details.get("aws_access_key_id") or
+            settings.AWS_ACCESS_KEY_ID
+        )
+        secret_key = (
+            connection_details.get("aws_secret_access_key") or
+            settings.AWS_SECRET_ACCESS_KEY
         )
 
-    def _get_container_name(self, connection_details: dict) -> str:
+        if access_key and secret_key:
+            kwargs["aws_access_key_id"] = access_key
+            kwargs["aws_secret_access_key"] = secret_key
+
+        return boto3.client("s3", **kwargs)
+
+    def _get_bucket_name(self, connection_details: dict) -> str:
         return (
-            connection_details.get("container") or
             connection_details.get("bucket") or
-            settings.AZURE_LANDING_CONTAINER or
-            "landing"
+            connection_details.get("bucket_name") or
+            settings.AWS_S3_LANDING_BUCKET or
+            "dataset-platform-landing"
         )
 
     def list_artifacts(self, source) -> list[Artifact]:
         connection_details = source.connection_details or {}
-        container_name = self._get_container_name(connection_details)
+        bucket_name = self._get_bucket_name(connection_details)
         prefix = connection_details.get("prefix", "")
 
         client = self._get_client(connection_details)
-        container_client = client.get_container_client(container_name)
+        kwargs = {"Bucket": bucket_name}
+        if prefix:
+            kwargs["Prefix"] = prefix
 
         artifacts = []
-        blobs = container_client.list_blobs(name_starts_with=prefix if prefix else None)
+        paginator = client.get_paginator("list_objects_v2")
 
-        for blob in blobs:
-            if blob.name.endswith("/"):
-                continue
+        for page in paginator.paginate(**kwargs):
+            for item in page.get("Contents", []):
+                key = item["Key"]
+                if key.endswith("/"):
+                    continue
 
-            last_modified_str = (
-                blob.last_modified.isoformat()
-                if hasattr(blob.last_modified, "isoformat")
-                else str(blob.last_modified)
-            )
-            etag_str = str(blob.etag or blob.name)
+                last_modified_str = item["LastModified"].isoformat()
+                etag_str = item["ETag"].strip('"')
 
-            artifacts.append(
-                Artifact(
-                    external_id=f"{blob.name}:{etag_str}",
-                    artifact_name=blob.name,
-                    last_modified=last_modified_str,
-                    metadata={
-                        "container": container_name,
-                        "object_name": blob.name,
-                        "size": blob.size,
-                        "etag": etag_str
-                    }
+                artifacts.append(
+                    Artifact(
+                        external_id=f"{key}:{etag_str}",
+                        artifact_name=key,
+                        last_modified=last_modified_str,
+                        metadata={
+                            "bucket": bucket_name,
+                            "object_name": key,
+                            "size": item["Size"],
+                            "etag": etag_str
+                        }
+                    )
                 )
-            )
 
         return artifacts
 
@@ -112,17 +117,15 @@ class AzureBlobConnector(BaseConnector):
         artifact: Artifact
     ) -> RawData:
         connection_details = source.connection_details or {}
-        container_name = (
-            artifact.metadata.get("container") or
-            self._get_container_name(connection_details)
+        bucket_name = (
+            artifact.metadata.get("bucket") or
+            self._get_bucket_name(connection_details)
         )
         object_name = artifact.metadata.get("object_name", artifact.artifact_name)
 
         client = self._get_client(connection_details)
-        blob_client = client.get_blob_client(container=container_name, blob=object_name)
-
-        stream = blob_client.download_blob()
-        content = stream.readall().decode("utf-8")
+        response = client.get_object(Bucket=bucket_name, Key=object_name)
+        content = response["Body"].read().decode("utf-8")
         format_type = object_name.split(".")[-1].upper()
 
         return RawData(
@@ -141,17 +144,15 @@ class AzureBlobConnector(BaseConnector):
         random_sample: bool = False
     ) -> RawData:
         connection_details = source.connection_details or {}
-        container_name = (
-            artifact.metadata.get("container") or
-            self._get_container_name(connection_details)
+        bucket_name = (
+            artifact.metadata.get("bucket") or
+            self._get_bucket_name(connection_details)
         )
         object_name = artifact.metadata.get("object_name", artifact.artifact_name)
 
         client = self._get_client(connection_details)
-        blob_client = client.get_blob_client(container=container_name, blob=object_name)
-
-        stream = blob_client.download_blob()
-        content = stream.readall().decode("utf-8")
+        response = client.get_object(Bucket=bucket_name, Key=object_name)
+        content = response["Body"].read().decode("utf-8")
         format_type = object_name.split(".")[-1].upper()
 
         if sample_ratio is not None:
@@ -204,31 +205,25 @@ class AzureBlobConnector(BaseConnector):
     ) -> Artifact | None:
         object_name = artifact_external_id.split(":")[0]
         connection_details = source.connection_details or {}
-        container_name = self._get_container_name(connection_details)
+        bucket_name = self._get_bucket_name(connection_details)
 
         client = self._get_client(connection_details)
-        blob_client = client.get_blob_client(container=container_name, blob=object_name)
-
         try:
-            properties = blob_client.get_blob_properties()
+            response = client.head_object(Bucket=bucket_name, Key=object_name)
         except Exception:
             return None
 
-        last_modified_str = (
-            properties.last_modified.isoformat()
-            if hasattr(properties.last_modified, "isoformat")
-            else str(properties.last_modified)
-        )
-        etag_str = str(properties.etag or object_name)
+        last_modified_str = response["LastModified"].isoformat()
+        etag_str = response["ETag"].strip('"')
 
         return Artifact(
             external_id=f"{object_name}:{etag_str}",
             artifact_name=object_name,
             last_modified=last_modified_str,
             metadata={
-                "container": container_name,
+                "bucket": bucket_name,
                 "object_name": object_name,
-                "size": properties.size,
+                "size": response["ContentLength"],
                 "etag": etag_str
             }
         )
@@ -242,12 +237,10 @@ class AzureBlobConnector(BaseConnector):
         write_mode: str = "APPEND",
         key_columns: list[str] | None = None
     ) -> None:
-        container_name = self._get_container_name(connection_details)
+        bucket_name = self._get_bucket_name(connection_details)
         prefix = connection_details.get("prefix", "").strip()
 
         client = self._get_client(connection_details)
-        container_client = client.get_container_client(container_name)
-
         object_name = f"{prefix}/{table_name}" if prefix else table_name
 
         if write_mode.upper() == "APPEND":
@@ -259,20 +252,29 @@ class AzureBlobConnector(BaseConnector):
                 suffix = f"_part_{int(time.time())}_{uuid.uuid4().hex[:6]}"
                 object_name = f"{object_name}{suffix}"
 
-        blob_client = container_client.get_blob_client(object_name)
-
+        content_type = "text/plain"
         if isinstance(data, str):
-            blob_client.upload_blob(data, overwrite=True)
+            content_type = "text/csv" if format_type.upper() == "CSV" else "application/json"
+            body = data.encode("utf-8")
         elif isinstance(data, bytes):
-            blob_client.upload_blob(data, overwrite=True)
+            content_type = "application/octet-stream" if format_type.upper() == "PARQUET" else "text/plain"
+            body = data
         else:
             if format_type.upper() == "CSV":
+                content_type = "text/csv"
                 output = StringIO()
                 if data:
                     writer = csv.DictWriter(output, fieldnames=list(data[0].keys()))
                     writer.writeheader()
                     writer.writerows(data)
-                blob_client.upload_blob(output.getvalue(), overwrite=True)
+                body = output.getvalue().encode("utf-8")
             else:
-                json_content = json.dumps(data, default=str)
-                blob_client.upload_blob(json_content, overwrite=True)
+                content_type = "application/json"
+                body = json.dumps(data, default=str).encode("utf-8")
+
+        client.put_object(
+            Bucket=bucket_name,
+            Key=object_name,
+            Body=body,
+            ContentType=content_type
+        )

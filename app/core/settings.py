@@ -11,17 +11,19 @@ class Settings(BaseSettings):
     DB_PASSWORD: str
     CLOUD_SQL_CONNECTION_NAME: str | None = None
 
-    # Cloud Provider Switch ("gcp" or "azure")
-    CLOUD_PROVIDER: str = "gcp"
+    # Cloud Provider Switch ("aws" or "gcp")
+    CLOUD_PROVIDER: str = "aws"
 
-    # GCP Core
+    # AWS Core
+    AWS_REGION: str = "us-east-1"
+    AWS_ACCESS_KEY_ID: str | None = None
+    AWS_SECRET_ACCESS_KEY: str | None = None
+    AWS_S3_LANDING_BUCKET: str = "dataset-platform-landing"
+
+    # GCP Core (Optional fallback)
     GCP_PROJECT_ID: str = "your-gcp-project-id"
     GCP_LOCATION: str = "us-central1"
 
-    # Azure Core
-    AZURE_SERVICEBUS_CONNECTION_STRING: str | None = None
-    AZURE_STORAGE_CONNECTION_STRING: str | None = None
-    AZURE_LANDING_CONTAINER: str = "landing"
 
 
     # GCP Pub/Sub Topics

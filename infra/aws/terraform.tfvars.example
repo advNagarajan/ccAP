@@ -1,0 +1,17 @@
+# =========================================================================
+# SAMPLE TERRAFORM VARIABLE CONFIGURATION (AWS)
+# =========================================================================
+# Copy this file to terraform.tfvars and customize for your environment:
+# cp terraform.tfvars.example terraform.tfvars
+
+aws_region             = "us-east-1"
+environment            = "dev"
+project_name           = "data-landing-platform"
+
+landing_bucket_prefix  = "dataset-platform-landing"
+frontend_bucket_prefix = "data-landing-platform-frontend"
+ecr_repository_name    = "data-landing-platform"
+
+db_name                = "metadata_db"
+db_username            = "postgres"
+db_password            = "ChangeThisStrongPassword123!"

@@ -38,16 +38,14 @@ def start_subscriber():
         "quality-check-completed": settings.PUBSUB_SUBSCRIPTION_QUALITY_CHECK_COMPLETED
     }
 
-    is_azure = (
-        settings.CLOUD_PROVIDER.lower() == "azure" or
-        (bool(settings.AZURE_SERVICEBUS_CONNECTION_STRING) and settings.GCP_PROJECT_ID == "your-gcp-project-id")
-    )
+    is_aws = settings.CLOUD_PROVIDER.lower() == "aws"
 
-    if is_azure:
-        from workers.common.azure_subscriber import start_azure_multi_subscriber
-        logger.info("Notification Worker dispatching in Azure Service Bus mode...")
-        start_azure_multi_subscriber(subscriptions, make_callback)
+    if is_aws:
+        from workers.common.aws_subscriber import start_aws_multi_subscriber
+        logger.info("Notification Worker dispatching in AWS SQS mode...")
+        start_aws_multi_subscriber(subscriptions, make_callback)
         return
+
 
     while True:
         subscriber = None

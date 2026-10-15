@@ -21,20 +21,18 @@ def run_worker_subscriber(
     from workers.common.dummy_server import start_dummy_server
     start_dummy_server()
 
-    is_azure = (
-        settings.CLOUD_PROVIDER.lower() == "azure" or
-        (bool(settings.AZURE_SERVICEBUS_CONNECTION_STRING) and settings.GCP_PROJECT_ID == "your-gcp-project-id")
-    )
+    is_aws = settings.CLOUD_PROVIDER.lower() == "aws"
 
-    if is_azure:
-        from workers.common.azure_subscriber import start_azure_subscriber
-        logger.info(f"[{worker_name}] Dispatching to Azure Service Bus mode...")
-        start_azure_subscriber(
+    if is_aws:
+        from workers.common.aws_subscriber import start_aws_subscriber
+        logger.info(f"[{worker_name}] Dispatching to AWS SQS/SNS mode...")
+        start_aws_subscriber(
             topic_name=topic_name,
             subscription_name=subscription_name,
             callback_fn=callback_fn
         )
     else:
+
         from google.cloud import pubsub_v1
         logger.info(f"[{worker_name}] Dispatching to Google Cloud Pub/Sub mode...")
         while True:

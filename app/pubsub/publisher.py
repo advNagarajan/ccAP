@@ -6,28 +6,41 @@ from app.core.settings import settings
 
 logger = logging.getLogger("publisher")
 
-_servicebus_client = None
+_sns_client = None
+_topic_arn_cache = {}
 
 
-def get_azure_servicebus_client():
-    global _servicebus_client
-    if _servicebus_client is None:
-        from azure.servicebus import ServiceBusClient
-        if not settings.AZURE_SERVICEBUS_CONNECTION_STRING:
-            raise ValueError("AZURE_SERVICEBUS_CONNECTION_STRING is required to publish messages on Azure Service Bus.")
-        _servicebus_client = ServiceBusClient.from_connection_string(settings.AZURE_SERVICEBUS_CONNECTION_STRING)
-    return _servicebus_client
+def get_sns_client():
+    global _sns_client
+    if _sns_client is None:
+        import boto3
+        kwargs = {"region_name": settings.AWS_REGION}
+        if settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
+            kwargs["aws_access_key_id"] = settings.AWS_ACCESS_KEY_ID
+            kwargs["aws_secret_access_key"] = settings.AWS_SECRET_ACCESS_KEY
+        _sns_client = boto3.client("sns", **kwargs)
+    return _sns_client
 
 
-def publish_event_azure(topic_name: str, payload: dict) -> str:
-    from azure.servicebus import ServiceBusMessage
-    client = get_azure_servicebus_client()
-    with client.get_topic_sender(topic_name=topic_name) as sender:
-        message = ServiceBusMessage(json.dumps(payload))
-        sender.send_messages(message)
-        msg_id = str(message.message_id or "")
-        print(f"Published to Azure Service Bus topic {topic_name} message_id={msg_id}")
-        return msg_id
+def get_sns_topic_arn(sns_client, topic_name: str) -> str:
+    if topic_name in _topic_arn_cache:
+        return _topic_arn_cache[topic_name]
+    res = sns_client.create_topic(Name=topic_name)
+    arn = res["TopicArn"]
+    _topic_arn_cache[topic_name] = arn
+    return arn
+
+
+def publish_event_aws(topic_name: str, payload: dict) -> str:
+    sns = get_sns_client()
+    topic_arn = get_sns_topic_arn(sns, topic_name)
+    response = sns.publish(
+        TopicArn=topic_arn,
+        Message=json.dumps(payload)
+    )
+    msg_id = response.get("MessageId", "")
+    print(f"Published to AWS SNS topic '{topic_name}' message_id={msg_id}")
+    return msg_id
 
 
 @functools.lru_cache(maxsize=1)
@@ -37,8 +50,9 @@ def get_publisher():
 
 
 def publish_event(topic_name: str, payload: dict):
-    if settings.CLOUD_PROVIDER.lower() == "azure" or (settings.AZURE_SERVICEBUS_CONNECTION_STRING and settings.GCP_PROJECT_ID == "your-gcp-project-id"):
-        return publish_event_azure(topic_name, payload)
+    if settings.CLOUD_PROVIDER.lower() == "aws":
+        return publish_event_aws(topic_name, payload)
+
 
     pub = get_publisher()
     topic_path = pub.topic_path(

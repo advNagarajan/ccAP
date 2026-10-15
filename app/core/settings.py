@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     CLOUD_PROVIDER: str = "aws"
 
     # AWS Core
-    AWS_REGION: str = "us-east-1"
+    AWS_REGION: str = "ap-southeast-2"
     AWS_ACCESS_KEY_ID: str | None = None
     AWS_SECRET_ACCESS_KEY: str | None = None
     AWS_S3_LANDING_BUCKET: str = "dataset-platform-landing"

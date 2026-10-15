@@ -32,6 +32,11 @@ output "cloudfront_domain_name" {
   value       = "https://${aws_cloudfront_distribution.frontend_cdn.domain_name}"
 }
 
+output "cloudfront_distribution_id" {
+  description = "The CloudFront Distribution ID (for cache invalidation)"
+  value       = aws_cloudfront_distribution.frontend_cdn.id
+}
+
 output "aws_access_key_id" {
   description = "AWS Access Key ID for GitHub Actions"
   value       = aws_iam_access_key.github_deployer_key.id

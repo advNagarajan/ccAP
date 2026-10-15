@@ -1,4 +1,4 @@
-export const DEFAULT_API_URL = 'http://localhost:8000';
+export const DEFAULT_API_URL = 'http://16.176.162.28:8000';
 import { getSessionCookie, removeSessionCookie } from './cookies';
 
 let apiRootUrl = import.meta.env.VITE_API_URL || DEFAULT_API_URL;

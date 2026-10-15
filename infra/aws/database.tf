@@ -23,22 +23,18 @@ resource "aws_security_group" "rds_sg" {
   }
 }
 
-# Parameter Group enabling pgvector
+# Parameter Group for PostgreSQL 15
 resource "aws_db_parameter_group" "postgres_params" {
-  name   = "${var.project_name}-pg15-params"
-  family = "postgres15"
-
-  parameter {
-    name  = "rds.extensions"
-    value = "vector"
-  }
+  name        = "${var.project_name}-pg15-params"
+  family      = "postgres15"
+  description = "Custom parameter group for PostgreSQL 15"
 }
 
 # Free-Tier eligible RDS PostgreSQL 15 Instance
 resource "aws_db_instance" "postgres" {
   identifier        = "${var.project_name}-db"
   engine            = "postgres"
-  engine_version    = "15.5"
+  engine_version    = "15"
   instance_class    = "db.t4g.micro" # Free-Tier eligible (or db.t3.micro)
   allocated_storage = 20
   storage_type      = "gp3"

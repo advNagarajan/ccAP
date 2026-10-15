@@ -101,6 +101,38 @@ resource "aws_iam_role_policy_attachment" "apprunner_ecr_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess"
 }
 
+resource "aws_iam_role" "apprunner_instance_role" {
+  name = "${var.project_name}-apprunner-instance-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "tasks.apprunner.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "apprunner_s3_policy" {
+  role       = aws_iam_role.apprunner_instance_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+}
+
+resource "aws_iam_role_policy_attachment" "apprunner_sqs_policy" {
+  role       = aws_iam_role.apprunner_instance_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSQSFullAccess"
+}
+
+resource "aws_iam_role_policy_attachment" "apprunner_sns_policy" {
+  role       = aws_iam_role.apprunner_instance_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSNSFullAccess"
+}
+
 resource "aws_apprunner_service" "api_service" {
   service_name = "${var.project_name}-api"
 
@@ -132,8 +164,9 @@ resource "aws_apprunner_service" "api_service" {
   }
 
   instance_configuration {
-    cpu    = "1024" # 1 vCPU
-    memory = "2048" # 2 GB RAM
+    cpu               = "1024" # 1 vCPU
+    memory            = "2048" # 2 GB RAM
+    instance_role_arn = aws_iam_role.apprunner_instance_role.arn
   }
 
   tags = {

@@ -1,7 +1,10 @@
 import time
 import json
 import logging
-from google.cloud import pubsub_v1
+try:
+    from google.cloud import pubsub_v1
+except ImportError:
+    pubsub_v1 = None
 
 from app.core.settings import settings
 from app.db.database import SessionLocal

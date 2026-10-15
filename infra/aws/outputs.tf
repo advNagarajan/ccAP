@@ -48,5 +48,20 @@ output "aws_secret_access_key" {
   sensitive   = true
 }
 
+output "server_public_ip" {
+  description = "Public IPv4 address of the EC2 backend & worker server"
+  value       = aws_instance.server.public_ip
+}
+
+output "server_public_dns" {
+  description = "Public DNS hostname of the EC2 backend & worker server"
+  value       = aws_instance.server.public_dns
+}
+
+output "api_url" {
+  description = "Public URL for the FastAPI backend"
+  value       = "http://${aws_instance.server.public_ip}:8000"
+}
+
 
 

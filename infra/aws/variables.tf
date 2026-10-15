@@ -87,3 +87,48 @@ variable "topics" {
     "context-generated"
   ]
 }
+
+# =========================================================================
+# EC2 COMPUTE & SLACK NOTIFICATION VARIABLES
+# =========================================================================
+variable "instance_type" {
+  description = "EC2 instance type for backend API and continuous worker daemons"
+  type        = string
+  default     = "t3.micro"
+}
+
+variable "slack_webhook_url" {
+  description = "Slack Webhook URL for general notifications"
+  type        = string
+  default     = ""
+}
+
+variable "slack_webhook_job_completed" {
+  description = "Slack Webhook URL for job completed"
+  type        = string
+  default     = ""
+}
+
+variable "slack_webhook_job_failed" {
+  description = "Slack Webhook URL for job failed"
+  type        = string
+  default     = ""
+}
+
+variable "slack_webhook_quality_check" {
+  description = "Slack Webhook URL for quality check results"
+  type        = string
+  default     = ""
+}
+
+variable "slack_webhook_dead_letter" {
+  description = "Slack Webhook URL for dead-letter poison pills"
+  type        = string
+  default     = ""
+}
+
+variable "slack_webhook_new_table" {
+  description = "Slack Webhook URL for new table mutations and drift"
+  type        = string
+  default     = ""
+}

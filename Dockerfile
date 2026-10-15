@@ -20,6 +20,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the application source code and worker codebase
 COPY app/ ./app/
 COPY workers/ ./workers/
+COPY scripts/ ./scripts/
+COPY sample_data/ ./sample_data/
 
 # Set Python path to ensure module imports resolve correctly
 ENV PYTHONPATH=/app
